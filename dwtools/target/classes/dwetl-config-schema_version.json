@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ETL Configuration for version numbers",
+  "description": "Defines allowed versions for DW application that uses etl library",
+  "type": "object",
+  "properties": {
+    "dwEtl": {
+      "type": "object",
+      "description": "Configuration for Data Warehouse etl",
+      "properties": {
+        "dwEtlConfigVersion": {
+          "type": "string",
+          "description": "version of an etl json configuration",
+          "enum": ["1"]
+        }
+      },
+      "patternProperties": {
+        "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+      },
+      "required": [
+        "dwEtlConfigVersion"
+      ],
+      "unevaluatedProperties": true
+    }
+  },
+  "required": [
+    "dwEtl"
+  ],
+  "unevaluatedProperties": true
+}

@@ -1,0 +1,4 @@
+Troubleshooting
+- Exception like: java.lang.RuntimeException: java.lang.String is not a valid external type for schema of int
+  * Likely reason:  Spark is possibly treating one of the numerical columns as integer and it is declared as String in the dimension's schema.
+                    The SQL to populate dimension needs a CAST of a that column TO STRING, e.g.,  CAST( GameId AS STRING )

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source Loader Configuration for version numbers",
+  "description": "Defines allowed versions for the application that uses source loader library",
+  "type": "object",
+  "properties": {
+    "sourceLoad": {
+      "type": "object",
+      "description": "Configuration for source loader",
+      "properties": {
+        "sourceLoadConfigVersion": {
+          "type": "string",
+          "description": "version of a source load json configuration",
+          "enum": ["1"]
+        }
+      },
+      "patternProperties": {
+        "^_comment": {}
+      },
+      "required": [
+        "sourceLoadConfigVersion"
+      ],
+      "unevaluatedProperties": true
+    }
+  },
+  "required": [
+    "sourceLoad"
+  ],
+  "unevaluatedProperties": true
+}

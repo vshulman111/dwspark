@@ -1,0 +1,626 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source Comparer Configuration v1",
+  "description": "Defines required fields for the application that uses DW Source Comparer library.  The application configuration can have other root level fields.",
+  "type": "object",
+  "$defs": {
+    "jdbcOptions": {
+      "description": "These options are applicable to all JDBC databases - currently sql server and oracle. See https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html for details.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "dbtable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "query": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "prepareQuery": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "lowerBound": {
+          "type": "string"
+        },
+        "upperBound": {
+          "type": "string"
+        },
+        "numPartitions": {
+          "type": "number"
+        },
+        "queryTimeout": {
+          "type": "number"
+        },
+        "fetchsize": {
+          "type": "number"
+        },
+        "sessionInitStatement": {
+          "type": "string"
+        },
+        "pushDownPredicate": {
+          "type": "boolean"
+        },
+        "pushDownAggregate": {
+          "type": "boolean"
+        },
+        "pushDownLimit": {
+          "type": "boolean"
+        },
+        "pushDownOffset": {
+          "type": "boolean"
+        },
+        "pushDownTableSample": {
+          "type": "boolean"
+        },
+        "keytab": {
+          "type": "string"
+        },
+        "principal": {
+          "type": "string"
+        },
+        "refreshKrb5Config": {
+          "type": "boolean"
+        },
+        "preferTimestampNTZ": {
+          "type": "boolean"
+        },
+        "hint": {
+          "type": "string"
+        }
+      },
+      "not": {
+        "required": ["partitionColumn"],
+        "description": "\"partitionColumn\" is excluded from the list of options for jdbc source since this column has to be defined in \"schema\" with \"isPartitionColumn\" flag"
+      },
+      "patternProperties": {
+        "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+      },
+      "required": [
+        "url"
+      ],
+      "customMessage": {
+        "not": "The field \"partitionColumn\" is not allowed within dbms object as it must be defined in the \"schema\" with \"isPartitionColumn\" flag set to true (that is because the tool needs column type for internal logic)."
+      },
+      "unevaluatedProperties": false
+    },
+    "compareSource": {
+      "description": "This definition is used for both - left and right - compare sources",
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "object",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "parquet": {
+                      "type": "object",
+                      "properties": {
+                      }
+                    }
+                  },
+                  "required": [
+                    "parquet"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "csv": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string"
+                        },
+                        "header": {
+                          "type": "boolean"
+                        },
+                        "encoding": {
+                          "type": "string"
+                        },
+                        "dateFormat": {
+                          "type": "string"
+                        },
+                        "nullValue": {
+                          "type": "string"
+                        },
+                        "escape": {
+                          "type": "string"
+                        },
+                        "quote": {
+                          "type": "string"
+                        },
+                        "delimiter": {
+                          "type": "string"
+                        },
+                        "multiLine": {
+                          "type": "boolean"
+                        },
+                        "inferSchema": {
+                          "type": "boolean"
+                        },
+                        "trueValue": {
+                          "type": "string"
+                        },
+                        "falseValue": {
+                          "type": "string"
+                        }
+                      },
+                      "unevaluatedProperties": false
+                    }
+                  },
+                  "required": [
+                    "csv"
+                  ]
+                }
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              },
+              "patternProperties": {
+                "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+              },
+              "required": [
+                "path"
+              ],
+              "unevaluatedProperties": false
+            }
+          },
+          "required": [
+            "file"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dbms": {
+              "type": "object",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "sqlServer": {
+                      "$ref": "#/$defs/jdbcOptions",
+                      "description": "Options for SQL Server jdbc connection."
+                    }
+                  },
+                  "patternProperties": {
+                    "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                  },
+                  "required": [
+                    "sqlServer"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "oracle": {
+                      "$ref": "#/$defs/jdbcOptions",
+                      "description": "Options for Oracle jdbc connection."                    }
+                  },
+                  "patternProperties": {
+                    "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                  },
+                  "required": [
+                    "oracle"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "mongoDb": {
+                      "type": "object",
+                      "description": "Properties for mongoDb can be any of the options supported by MongoDb Spark connector in batch mode. Schema must be defined",
+                      "properties": {
+                        "connection.uri": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        },
+                        "collection": {
+                          "type": "string"
+                        },
+                        "comment": {
+                          "type": "string"
+                        },
+                        "mode": {
+                          "type": "string"
+                        },
+                        "columnNameOfCorruptRecord": {
+                          "type": "string"
+                        },
+                        "mongoClientFactory": {
+                          "type": "string"
+                        },
+                        "partitioner": {
+                          "type": "string"
+                        },
+                        "sampleSize": {
+                          "type": "number"
+                        },
+                        "sql.inferSchema.mapTypes.enabled": {
+                          "type": "boolean"
+                        },
+                        "sql.inferSchema.mapTypes.minimum.key.size": {
+                          "type": "number"
+                        },
+                        "aggregation.pipeline": {
+                          "anyOf": [
+                            { "type": "string" },
+                            {
+                              "type": "array",
+                              "items": { "type": "string" }
+                            }
+                          ]
+                        },
+                        "aggregation.allowDiskUse": {
+                          "type": "boolean"
+                        },
+                        "outputExtendedJson": {
+                          "type": "boolean"
+                        }
+                      },
+                      "patternProperties": {
+                        "^partitioner\\.options\\.": { "type": "string" },
+                        "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                      },
+                      "required": [
+                        "connection.uri", "collection"
+                      ],
+                      "unevaluatedProperties": false                          }
+                  },
+                  "patternProperties": {
+                    "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                  },
+                  "required": [
+                    "mongoDb"
+                  ]
+                }
+              ],
+              "properties": {
+                "user": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                }
+              },
+              "patternProperties": {
+                "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+              },
+              "required": [
+              ],
+              "unevaluatedProperties": false
+            }
+          },
+          "required": [
+            "dbms"
+          ]
+        }
+      ],
+      "properties": {
+        "moniker": {
+          "type": "string",
+          "description": "A meaningful name of the source to show in compare results. If none defined – the default is “left” or “right”"
+        },
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "colName": {
+                "type": "string",
+                "description": "Column nmae"
+              },
+              "colType": {
+                "type": "string",
+                "description": "Column type"
+              },
+              "isPartitionColumn": {
+                "type": "boolean",
+                "description": "For DBMS source one column can be defined as partition column to read data on multiple connections in parallel. isPartitionColumn must be defined if numPartitions is defined."
+              }
+            },
+            "patternProperties": {
+              "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+            },
+            "required": [
+              "colName"
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "isPartitionColumn": {
+                      "const": true
+                    }
+                  },
+                  "required": ["isPartitionColumn"]
+                },
+                "then": {
+                  "description": "If \"isPartitionColumn\" attribute of a column is set to true, colType must be defined (needed to determine the type of upper and lower bounds.",
+                  "required": ["colType"],
+                  "customMessage": {
+                    "required": "\"colType\" is required when \"isPartitionColumn\" is true."
+                  }
+                }
+              }
+            ],
+            "unevaluatedProperties": false
+          }
+        },
+        "subsetQuery": {
+          "description": "Query to create a subset of columns and/or rows to compare. It can be any valid select statement using Spark SQL syntax to be executed on a data loaded from the Source. Source table must be desinated by three underscores, e.g., SELECT CAST(id AS INT) AS id FROM ___ .If not defined all fields and all rows from the source will be used",
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern":  "^.*___.*$",
+              "customMessage": {
+                "type": "\"subsetQuery\" must be a string or an array of strings (this message may be displayed even if type is string or array, when there are other errors - ignore it in that case).",
+                "pattern": "The query must have a three underscores ( ___ ) placeholder for a source table."
+              }
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "contains": {
+                "pattern": "^.*___.*$"
+              },
+              "customMessage": {
+                "type": "\"subsetQuery\" must be a string or an array of strings (this message may be displayed even if type is string or array, when there are other errors - ignore it in that case).",
+                "contains": "At least one element in the array must have a three underscores ( ___ ) placeholder for a source table."
+              }
+            }
+          ]
+        }
+      },
+      "patternProperties": {
+        "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+      },
+      "required": [
+        "moniker"
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "properties": {
+    "sourceCompare": {
+      "type": "object",
+      "description": "Configuration for source compare",
+      "properties": {
+        "sourceCompareConfigVersion": {
+          "type": "string",
+          "description": "Version of a Source Comparer json configuration",
+          "enum": ["1"]
+        },
+        "compareScenarios": {
+          "type": "array",
+          "description": "Specifications for comparing sources",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "A name of the compare scenario to differentiate multiple scenarios. Names must be unique."
+              },
+              "isActive": {
+                "type": "boolean",
+                "description": "If the value of isActive is false, the compare scenario will not be processed."
+              },
+              "isDebugDwLib": {
+                "type": "boolean",
+                "description": "If the value is true, there will be some dataframe related output sent to the standard output from the library causing slowdown in job execution."
+              },
+              "floatThreshold": {
+                "type": "number",
+                "description": "When comparing two floating point values, they will be considered equal if the absolute value of a difference is less than floatThreshold."
+              },
+              "timestampTruncateUnit": {
+                "type": "string",
+                "description": "When comparing two timestamp fields they will be truncated using defined unit prior to being compared.",
+                "pattern": "^(?i)(year|yyyy|yy|month|mon|mm|day|dd|microsecond|millisecond|second|minute|hour|week|quarter)$",
+                "customMessage": {
+                  "pattern": "The allowed values for timestampTruncateUnit are year,yyyy,yy,month,mon,mm,day,dd,microsecond,millisecond,second,minute,hour,week and quarter."
+                }
+              },
+              "dateTruncateUnit": {
+                "type": "string",
+                "description": "When comparing two date fields they will be truncated using defined unit prior to being compared.",
+                "pattern": "^(?i)(year|yyyy|yy|month|mon|mm|week|quarter)$",
+                "customMessage": {
+                  "pattern": "The allowed values for dateTruncateUnit are year,yyyy,yy,month,mon,mm,week and quarter."
+                }
+              },
+              "maxSameDifferences": {
+                "type": "number",
+                "description": "When defined, the number of reported differences for each column will not exceed the specified value. That will reduce the size of resulting differences file."
+              },
+              "compareResult": {
+                "type": "object",
+                "description": "Specification for the result of the comparison",
+                "properties": {
+                  "file": {
+                    "type": "object",
+                    "properties": {
+                      "dir": {
+                        "type": "string"
+                      },
+                      "csv": {
+                        "type": "object",
+                        "description": "Properties for csv file. By default the saved file is multiline",
+                        "properties": {
+                          "mode": {
+                            "type": "string"
+                          },
+                          "header": {
+                            "type": "boolean"
+                          },
+                          "encoding": {
+                            "type": "string"
+                          },
+                          "dateFormat": {
+                            "type": "string"
+                          },
+                          "nullValue": {
+                            "type": "string"
+                          },
+                          "escape": {
+                            "type": "string"
+                          },
+                          "quote": {
+                            "type": "string"
+                          },
+                          "delimiter": {
+                            "type": "string"
+                          }
+                        },
+                        "unevaluatedProperties": false
+                      }
+                    },
+                    "patternProperties": {
+                      "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                    },
+                    "required": [
+                      "dir",
+                      "csv"
+                    ],
+                    "unevaluatedProperties": false
+                  },
+                  "schema": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "colName": {
+                          "type": "string",
+                          "description": "Column name"
+                        },
+                        "isUniqueKey": {
+                          "type": "boolean",
+                          "description": "At least one column must have this property set to true. \nMultiple columns can be designated as unique key to create a compound unique key.\nBy default the unique key is included unless isInclude value is set to false\n"
+                        },
+                        "isInclude": {
+                          "type": "boolean",
+                          "description": "By default all columns are compared and included in comparison result, unless at least one column has explicit isInclude flag set (to true or false).\nIf that's the case only columns with isInclude flag set to true will be compared and included into comparison result.\nIf columns are listed that do not have isInclude flag, they will be ignored, unless they are keys.\nFor keys (isUniqueKey is set to true) the default for isInclude is true\n"
+                        }
+                      },
+                      "patternProperties": {
+                        "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                      },
+                      "required": [
+                        "colName"
+                      ],
+                      "unevaluatedProperties": false
+                    },
+
+                    "allOf" : [
+                      {
+                        "contains": {
+                          "type": "object",
+                          "required": [
+                            "isUniqueKey"
+                          ],
+                          "properties": {
+                            "isUniqueKey": {
+                              "const": true
+                            }
+                          }
+                        },
+                        "minContains": 1,
+                        "customMessage": {
+                          "contains": "Compare result's schema does not have unique key defined. At least one column must have \"isUniqueKey\" flag set to true, i.e., ... \"isUniqueKey\" : true, ... "
+                        }
+                      }
+                    ],
+                    "customMessage": {
+                      "minItems": "Compare result's schema does not have any columns defined. It must have at least one column"
+                    }
+                  }
+                },
+                "patternProperties": {
+                  "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                },
+                "required": [
+                  "file",
+                  "schema"
+                ],
+                "unevaluatedProperties": false
+              },
+              "leftSource": {
+                "$ref": "#/$defs/compareSource",
+                "description": "First or left source to compare. Both left and right sections are identical in terms of structure, but they can have different types of sources. For example, one can be DBMS and another a file. The sets being compared must have common columns matched compareResult.schema."
+              },
+              "rightSource": {
+                "$ref": "#/$defs/compareSource",
+                "description": "Second or right source to compare. Both left and right sections are identical in terms of structure, but they can have different types of sources. For example, one can be DBMS and another a file. The sets being compared must have common columns matched compareResult.schema."
+              }
+            },
+            "patternProperties": {
+              "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+            },
+            "required": [
+              "name",
+              "isActive",
+              "compareResult",
+              "leftSource",
+              "rightSource"
+            ],
+            "unevaluatedProperties": false
+          }
+        }
+      },
+      "patternProperties": {
+        "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+      },
+      "required": [
+        "sourceCompareConfigVersion",
+        "compareScenarios"
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "required": [
+    "sourceCompare"
+  ],
+  "unevaluatedProperties": true
+}

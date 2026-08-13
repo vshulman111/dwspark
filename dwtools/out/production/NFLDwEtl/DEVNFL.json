@@ -1,0 +1,351 @@
+{
+  "isDebug" : false,
+  "sparkParams" :
+  {
+    "sessionAppName" : "Spark NFL DW",
+    "sessionConfigMaster" : "local",
+    "sessionConfigDriverHost" : "localhost",
+    "optional sessionConfigLocalDir" : "C:\\ASCODE\\DATA\\Temp"
+  },
+  "dwEtl" :
+  {
+    "dwEtlConfigVersion": "1",
+    "jobType" : "LoadFacts",
+    "isDebugDwLib" : false,
+    "isInitialLoad" : true,
+    "_comment_optional_rerunEtlAfter" : "2021-04-28T16:33:00.119Z",
+    "_commentTODO": "check the rerunEtlAfter still works when defined using ISO standard, i.e., format like 2021-04-28T16:33:00.119Z ",
+    "logFileDir" : "C:\\ASCODE\\LOGS\\Etl\\",
+    "fileEtlLog" : {
+      "parquet" : {},
+      "path" : "C:\\ASCODE\\DATA\\NFL\\DW.ETL\\etlDwNFL.parquet\\"
+    },
+    "_comment moniker" : "moniker must be unique for each etl source, the sources will be searched by their monikers",
+    "stgSources" :
+    [
+      { "moniker" : "PlayByPlay",
+        "description" : "Play by play s/sheet for all games",
+        "applicationSpecific": {
+          "_comment __transactionName" : "transactionName is an optional attribute",
+          "transactionName" : "play"
+        },
+        "_comment __effectiveDateColumn" : "effectiveDateColumn is an optional attribute",
+        "effectiveDateColumn" : "GameDate",
+        "isDefaultForEffectiveDate" : true,
+        "_comment __timestampColumn" : "timestampColumn is optional and can be used for incremental load",
+        "timestampColumn" : "_SrcDt_RowTimestamp",
+        "_comment __effectiveDateDays_comment1_" : "Effective Date\n|2014-01-11|\n|2013-12-15|\n|2014-10-12|\n rule selected from Stg Sources to define Date dimension and to load dimensions with type 2 columns. The values can be \"distinct\", i.e., only the values in the stg source used in the etl, \"weekdays\", i.e., all days between min and max values excluding weekends, or \"all\" - all days beween min and max values",
+        "_comment __effectiveDateDays_comment2_" : "EffectiveDateRule default = all",
+        "effectiveDateRule" : "DISTINCT",
+        "fileSource" : { "path" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\stgPbp.parquet",  "parquet" : { } }
+      },
+      { "moniker" : "Teams",
+        "description" : "Team names historically",
+        "fileSource" : { "path" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\Team.parquet",  "parquet" : { } }
+      }
+    ],
+    "dimAuthority" :
+    {
+      "packageName" : "com.dbtimes.nfldw.dimauth",
+      "dimensionNamePattern" : "(?<dimName>Dim[A-Z][a-zA-Z0-9]+)",
+      "fileDimensionsDestination" :
+      {
+        "parquet" : {},
+        "_comment__path" : "text 'DimNamePlaceholder' in path must match the dimensionNamePattern above. Text 'DimNamePlaceholder' will be replaced with actual dimension name which also has to match the pattern",
+        "path" : "C:\\ASCODE\\DATA\\NFL\\DW\\DimNamePlaceholder.parquet",
+        "previousCopyPath" : "C:\\ASCODE\\DATA\\NFL\\DimAuthorityPrev\\DimNamePlaceholder.prev.parquet"
+      }
+    },
+    "_comment_dimension_name" : "dimension name must match the dimensionNamePattern.It will be used to replace name placeholder with actual dimension name",
+    "dimensions" :
+    [
+      {
+        "name" : "DmTest",
+        "isLoad" : false,
+        "dimensionStgSources" :
+        [
+        ],
+        "schema" :
+        [
+          { "colName" : "DataSourceKey","colType" : "Long", "isKey" : true, "isSurrogateKey" : true, "unknownValue" : "0" },
+          { "colName" : "DataSourceMoniker","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "Unknown" },
+          { "colName" : "DataSourceDescription", "isKey" : false, "colType" : "Long", "unknownValue" : "Unknown" },
+          { "colName" : "TransactionName","colType" : "String", "unknownValue" : "Unknown" }
+        ]
+      },
+      {
+        "name" : "DimDataSource",
+        "isLoad" : true,
+        "dimensionStgSources" :
+        [
+        ],
+        "schema" :
+        [
+          { "colName" : "DataSourceKey","colType" : "Long", "isKey" : true, "isSurrogateKey" : true, "unknownValue" : "0" },
+          { "colName" : "DataSourceMoniker","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "Unknown" },
+          { "colName" : "DataSourceDescription","colType" : "String", "unknownValue" : "Unknown" },
+          { "colName" : "TransactionName","colType" : "String", "unknownValue" : "Unknown" }
+        ]
+      },
+      {
+        "_comment_dimension_name" : "dimension name must match the dimensionNamePattern. It will be used to replace name placeholder with actual dimension name",
+        "name" : "DimDate",
+        "isLoad" : true,
+        "_comment_dimensionStgSources_1" : "dimensionStgSources is optional and can be empty or absent",
+        "_comment_dimensionStgSources_2" : "dimensionStgSources can have secondary sources to join to primary source to build the dimenion",
+        "_comment_schema" : "attributes \"colName\" and \"colType\" must be named exactly that, \"isSurrogateKey\" must be defined on a \"isKey\" column ",
+        "schema" :
+        [
+          { "colName" : "DateKey","colType" : "Integer", "isKey" : true, "isSurrogateKey" : false, "unknownValue" : "0" },
+          { "colName" : "Date","colType" : "Date", "isNaturalKey" : true, "unknownValue" : "1900-01-01" },
+          { "colName" : "DateDesc","colType" : "String", "unknownValue" : "Unknown" },
+          { "colName" : "MonthName","colType" : "String", "unknownValue" : "Unknown" },
+          { "colName" : "Year","colType" : "Integer",  "unknownValue" : "1900" },
+          { "colName" : "Quarter","colType" : "Integer", "unknownValue" : "0"  },
+          { "colName" : "QuarterDesc","colType" : "String", "unknownValue" : "Unknown" },
+          { "colName" : "SeasonYear","colType" : "Date", "unknownValue" : "1900-01-01"  },
+          { "colName" : "SeasonDescription","colType" : "String", "unknownValue" : "Unknown" }
+        ]
+      },
+      {
+        "name" : "DimGame",
+        "isLoad" : true,
+        "dimensionStgSources" :
+        [
+          { "moniker" : "PlayByPlay" },
+          { "moniker" : "Teams" }
+        ],
+        "schema" :
+        [
+          { "colName" : "GameKey","colType" : "Long", "isKey" : true, "isSurrogateKey" : true, "unknownValue" : "0" },
+          { "colName" : "GameId","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "Unknown" },
+          { "colName" : "GameTeams","colType" : "String", "unknownValue" : "Unknown" }
+        ]
+      },
+      {
+        "name" : "DimFieldPosition",
+        "isLoad" : true,
+        "dimensionStgSources" :
+        [
+          { "moniker" : "PlayByPlay" }
+        ],
+        "schema" :
+        [
+          { "colName" : "FieldPositionKey","colType" : "Long", "isKey" : true, "isSurrogateKey" : true, "unknownValue" : "0" },
+          { "colName" : "Down","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "YardLine","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "RushDirection","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "YardLineFixed","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "YardLineDirection","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" }
+        ]
+      },
+      {
+        "name" : "DimPlayType",
+        "isLoad" : true,
+        "dimensionStgSources" :
+        [
+          { "moniker" : "PlayByPlay" }
+        ],
+        "schema" :
+        [
+          { "colName" : "PlayTypeKey","colType" : "Long", "isKey" : true, "isSurrogateKey" : true, "unknownValue" : "0" },
+          { "colName" : "Formation","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "PlayType","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "PassType","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "PenaltyType","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" }
+        ]
+      },
+      {
+        "name" : "DimPlayTime",
+        "isLoad" : true,
+        "dimensionStgSources" :
+        [
+          { "moniker" : "PlayByPlay" }
+        ],
+        "schema" :
+        [
+          { "colName" : "PlayTimeKey","colType" : "Long", "isKey" : true, "isSurrogateKey" : true, "unknownValue" : "0" },
+          { "colName" : "Quarter","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "Minute","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "Second","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" }
+        ]
+      },
+      {
+        "name" : "DimPlayDetails",
+        "isLoad" : true,
+        "dimensionStgSources" :
+        [
+          { "moniker" : "PlayByPlay" }
+        ],
+        "schema" :
+        [
+          { "colName" : "PlayDetailsKey","colType" : "Long", "isKey" : true, "isSurrogateKey" : true, "unknownValue" : "0" },
+          { "colName" : "IsRush","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsPass","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsIncomplete","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsTouchdown","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsSack","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsChallenge","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsChallengeReversed","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsMeasurement","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsInterception","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsFumble","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsPenalty","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsTwoPointConversion","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsTwoPointConversionSuccessful","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsPenaltyAccepted","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "IsNoPlay","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" }
+        ]
+      },
+      {
+        "name" : "DimTeam",
+        "isLoad" : true,
+        "dimensionStgSources" :
+        [
+          { "moniker" : "Teams" }
+        ],
+        "schema" :
+        [
+          { "colName" : "TeamKey","colType" : "Long", "isKey" : true, "isSurrogateKey" : true, "unknownValue" : "0" },
+          { "colName" : "TeamOriginalName","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" },
+          { "colName" : "TeamName","colType" : "String",  "isNaturalKey" : false, "unknownValue" : "" },
+          { "colName" : "TeamAbbrevName","colType" : "String", "unknownValue" : "" },
+          { "colName" : "TeamConference","colType" : "String",  "unknownValue" : "" },
+          { "colName" : "HistTeamName","colType" : "String", "isTypeTwo" : true, "unknownValue" : "" },
+          { "colName" : "HistTeamAbbrevName","colType" : "String", "isTypeTwo" : true, "unknownValue" : "" }
+        ]
+      },
+      {
+        "name" : "DimTeamRole",
+        "_comment" : "This is static dimension. Its population is not needed in incremental load",
+        "isLoad" : true,
+        "dimensionStgSources" :
+        [
+        ],
+        "schema" :
+        [
+          { "colName" : "TeamRoleKey","colType" : "Integer", "isKey" : true, "isSurrogateKey" : false, "unknownValue" : "0" },
+          { "colName" : "TeamRole","colType" : "String",  "isNaturalKey" : true, "unknownValue" : "" }
+        ]
+      }
+    ],
+    "dataMart" :
+    {
+      "packageName" : "com.dbtimes.nfldw.datamartgames",
+      "factNamePattern" : "(?<factName>Fact[A-Z][a-zA-Z0-9]+)",
+      "fileFactsDestination" :
+      {
+        "parquet" : {},
+        "_comment_path" : "text 'FactNamePlaceholder' in path must match the factNamePattern above. Text 'FactNamePlaceholder' will be replaced with actual fact table name which also has to match the pattern",
+        "path" : "C:\\ASCODE\\DATA\\NFL\\DW\\FactNamePlaceholder.parquet",
+        "pathWithKeySetters" : "C:\\ASCODE\\DATA\\NFL\\DW.ETL\\FactNamePlaceholder.WithKeySetters.parquet"
+      }
+    },
+    "facts" :
+    [
+      { "name" : "FactPlaysForMerge",
+        "isLoad" : true,
+        "processingMode" : "MERGE_PARTITION",
+        "factStgSources" :
+        [
+          { "moniker" : "PlayByPlay" }
+        ],
+        "schema" :
+        [
+          { "colName" : "SeasonYear", "colType" : "Integer", "isForPartition" : true },
+          { "colName" : "DataSourceMoniker", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "DataSourceKey", "underlyingDim" : "DimDataSource", "underlyingDimCol" : "DataSourceMoniker" },
+          { "colName" : "GameId", "colType" : "String", "isMergeKey" : true, "isForSettingForeignKey" : true, "foreignKey" : "GameKey", "underlyingDim" : "DimGame", "underlyingDimCol" : "GameId" },
+          { "colName" : "PlayDate", "colType" : "Date", "isMergeKey" : true, "isForSettingForeignKey" : true, "isEffDateForTypeTwo" : true, "foreignKey" : "PlayDateKey", "underlyingDim" : "DimDate", "underlyingDimCol" : "Date" },
+          { "colName" : "OffenseTeamAbbrevName", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "OffenseTeamKey", "underlyingDim" : "DimTeam", "underlyingDimCol" : "HistTeamAbbrevName" },
+          { "colName" : "DefenseTeamAbbrevName", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "DefenseTeamKey", "underlyingDim" : "DimTeam", "underlyingDimCol" : "HistTeamAbbrevName" },
+          { "colName" : "PenaltyTeamAbbrevName", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PenaltyTeamKey", "underlyingDim" : "DimTeam", "underlyingDimCol" : "HistTeamAbbrevName" },
+          { "colName" : "TimeoutTeamAbbrevName", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "TimeoutTeamKey", "underlyingDim" : "DimTeam", "underlyingDimCol" : "HistTeamAbbrevName" },
+          { "colName" : "Formation", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "Formation" },
+          { "colName" : "PlayType", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "PlayType" },
+          { "colName" : "PassType", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "PassType" },
+          { "colName" : "PenaltyType", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "PenaltyType" },
+          { "colName" : "ToGo", "colType" : "Double",  "isMeasure" : true },
+          { "colName" : "PenaltyYards", "colType" : "Double",  "isMeasure" : true }
+        ]
+      },
+      { "name" : "FactPlays",
+        "isLoad" : true,
+        "processingMode" : "REPLACE_PARTITION",
+        "factStgSources" :
+        [
+          { "moniker" : "PlayByPlay" }
+        ],
+        "schema" :
+        [
+          { "colName" : "SeasonYear", "colType" : "Integer", "isForPartition" : true },
+          { "colName" : "DataSourceMoniker", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "DataSourceKey", "underlyingDim" : "DimDataSource", "underlyingDimCol" : "DataSourceMoniker" },
+          { "colName" : "GameId", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "GameKey", "underlyingDim" : "DimGame", "underlyingDimCol" : "GameId" },
+          { "colName" : "PlayDate", "colType" : "Date", "isForSettingForeignKey" : true, "isEffDateForTypeTwo" : true, "foreignKey" : "PlayDateKey", "underlyingDim" : "DimDate", "underlyingDimCol" : "Date" },
+          { "colName" : "OffenseTeamAbbrevName", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "OffenseTeamKey", "underlyingDim" : "DimTeam", "underlyingDimCol" : "HistTeamAbbrevName" },
+          { "colName" : "DefenseTeamAbbrevName", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "DefenseTeamKey", "underlyingDim" : "DimTeam", "underlyingDimCol" : "HistTeamAbbrevName" },
+          { "colName" : "PenaltyTeamAbbrevName", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PenaltyTeamKey", "underlyingDim" : "DimTeam", "underlyingDimCol" : "HistTeamAbbrevName" },
+          { "colName" : "TimeoutTeamAbbrevName", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "TimeoutTeamKey", "underlyingDim" : "DimTeam", "underlyingDimCol" : "HistTeamAbbrevName" },
+          { "colName" : "Formation", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "Formation" },
+          { "colName" : "PlayType", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "PlayType" },
+          { "colName" : "PassType", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "PassType" },
+          { "colName" : "PenaltyType", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "PenaltyType" },
+          { "colName" : "Down", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "FieldPositionKey", "underlyingDim" : "DimFieldPosition", "underlyingDimCol" : "Down" },
+          { "colName" : "YardLine", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "FieldPositionKey", "underlyingDim" : "DimFieldPosition", "underlyingDimCol" : "YardLine" },
+          { "colName" : "RushDirection", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "FieldPositionKey", "underlyingDim" : "DimFieldPosition", "underlyingDimCol" : "RushDirection" },
+          { "colName" : "YardLineFixed", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "FieldPositionKey", "underlyingDim" : "DimFieldPosition", "underlyingDimCol" : "YardLineFixed" },
+          { "colName" : "YardLineDirection", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "FieldPositionKey", "underlyingDim" : "DimFieldPosition", "underlyingDimCol" : "YardLineDirection" },
+          { "colName" : "Quarter", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTimeKey", "underlyingDim" : "DimPlayTime", "underlyingDimCol" : "Quarter" },
+          { "colName" : "Minute", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTimeKey", "underlyingDim" : "DimPlayTime", "underlyingDimCol" : "Minute" },
+          { "colName" : "Second", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTimeKey", "underlyingDim" : "DimPlayTime", "underlyingDimCol" : "Second" },
+          { "colName" : "IsRush", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsRush" },
+          { "colName" : "IsPass", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsPass" },
+          { "colName" : "IsIncomplete", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsIncomplete" },
+          { "colName" : "IsTouchdown", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsTouchdown" },
+          { "colName" : "IsSack", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsSack" },
+          { "colName" : "IsChallenge", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsChallenge" },
+          { "colName" : "IsChallengeReversed", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsChallengeReversed" },
+          { "colName" : "IsMeasurement", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsMeasurement" },
+          { "colName" : "IsInterception", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsInterception" },
+          { "colName" : "IsFumble", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsFumble" },
+          { "colName" : "IsPenalty", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsPenalty" },
+          { "colName" : "IsTwoPointConversion", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsTwoPointConversion" },
+          { "colName" : "IsTwoPointConversionSuccessful", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsTwoPointConversionSuccessful" },
+          { "colName" : "IsPenaltyAccepted", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsPenaltyAccepted" },
+          { "colName" : "IsNoPlay", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayDetailsKey", "underlyingDim" : "DimPlayDetails", "underlyingDimCol" : "IsNoPlay" },
+          { "colName" : "Score", "colType" : "Double", "isMeasure" : true },
+          { "colName" : "Yards", "colType" : "Double",  "isMeasure" : true },
+          { "colName" : "ToGo", "colType" : "Double",  "isMeasure" : true },
+          { "colName" : "PenaltyYards", "colType" : "Double",  "isMeasure" : true }
+        ]
+      },
+      { "name" : "FactBridgeTeamsPlays",
+        "isLoad" : true,
+        "processingMode" : "REPLACE",
+        "factStgSources" :
+        [
+          { "moniker" : "PlayByPlay" }
+        ],
+        "schema" :
+        [
+          { "colName" : "DataSourceMoniker", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "DataSourceKey", "underlyingDim" : "DimDataSource", "underlyingDimCol" : "DataSourceMoniker" },
+          { "colName" : "GameId", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "GameKey", "underlyingDim" : "DimGame", "underlyingDimCol" : "GameId" },
+          { "colName" : "PlayDate", "colType" : "Date", "isForSettingForeignKey" : true, "isEffDateForTypeTwo" : true, "foreignKey" : "PlayDateKey", "underlyingDim" : "DimDate", "underlyingDimCol" : "Date" },
+          { "colName" : "TeamAbbrevName", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "TeamKey", "underlyingDim" : "DimTeam", "underlyingDimCol" : "HistTeamAbbrevName" },
+          { "colName" : "TeamRole","colType" : "String",  "isForSettingForeignKey" : true, "foreignKey" : "TeamRoleKey", "underlyingDim" : "DimTeamRole", "underlyingDimCol" : "TeamRole" },
+          { "colName" : "Formation", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "Formation" },
+          { "colName" : "PlayType", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "PlayType" },
+          { "colName" : "PassType", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "PassType" },
+          { "colName" : "PenaltyType", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTypeKey", "underlyingDim" : "DimPlayType", "underlyingDimCol" : "PenaltyType" },
+          { "colName" : "Down", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "FieldPositionKey", "underlyingDim" : "DimFieldPosition", "underlyingDimCol" : "Down" },
+          { "colName" : "YardLine", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "FieldPositionKey", "underlyingDim" : "DimFieldPosition", "underlyingDimCol" : "YardLine" },
+          { "colName" : "RushDirection", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "FieldPositionKey", "underlyingDim" : "DimFieldPosition", "underlyingDimCol" : "RushDirection" },
+          { "colName" : "YardLineFixed", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "FieldPositionKey", "underlyingDim" : "DimFieldPosition", "underlyingDimCol" : "YardLineFixed" },
+          { "colName" : "YardLineDirection", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "FieldPositionKey", "underlyingDim" : "DimFieldPosition", "underlyingDimCol" : "YardLineDirection" },
+          { "colName" : "Quarter", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTimeKey", "underlyingDim" : "DimPlayTime", "underlyingDimCol" : "Quarter" },
+          { "colName" : "Minute", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTimeKey", "underlyingDim" : "DimPlayTime", "underlyingDimCol" : "Minute" },
+          { "colName" : "Second", "colType" : "String", "isForSettingForeignKey" : true, "foreignKey" : "PlayTimeKey", "underlyingDim" : "DimPlayTime", "underlyingDimCol" : "Second" }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,141 @@
+{
+  "sparkParams":
+  {
+    "sessionAppName": "Spark Data Source Loader"
+  },
+  "sourceLoad":
+  {
+    "sourceLoadConfigVersion": "1",
+    "logFileDir": "/dw/data/logs/sourceLoad/",
+    "loadActions":
+    [
+      {
+        "name" : "Load Team file",
+        "isActive": true,
+        "fileLoadControl" :
+        {
+          "parquet" : {},
+          "dir" : "/dw/data/control/"
+        },
+        "fileSource" :
+        {
+          "isRemoveDuplicateRows": false,
+          "fileSystemLocation" :{
+            "dir": "/dw/data/sources/teaminfo",
+            "namePattern" : "NFL-Teams\\.csv"
+          },
+          "csv" :
+          {
+            "header" : true
+          },
+          "processedFilesDir": "/dw/data/sources/processed/"
+        },
+        "fileDestination" :
+        {
+          "isVersioned" : false,
+          "parquet" : {},
+          "path" : "/dw/data/staging/team.parquet",
+          "previousCopyPath" : "/dw/data/staging/team.prev.parquet"
+        },
+        "schema" :
+        [
+          { "colName" : "TeamName","colType" : "String" },
+          { "colName" : "SeasonAbbreviation", "colType" : "String" },
+          { "colName" : "SeasonYear", "colType" : "Integer" },
+          { "colName" : "SeasonTeamName", "colType" : "String" },
+          { "colName" : "ActiveSince", "colType" : "Integer" }
+        ]
+      },
+      {
+        "name" : "Load Players file",
+        "isActive": true,
+        "fileLoadControl" :
+        {
+          "parquet" : {},
+          "dir" : "/dw/data/control/"
+        },
+        "fileSource" :
+        {
+          "isRemoveDuplicateRows": false,
+          "fileSystemLocation" :{
+            "dir": "/dw/data/sources/players",
+            "namePattern" : "players_2013-12-12.csv"
+          },
+          "csv" :
+          {
+            "header" : true
+          },
+          "processedFilesDir": "/dw/data/sources/processed/"
+        },
+        "fileDestination" :
+        {
+          "isVersioned" : false,
+          "parquet" : {},
+          "path" : "/dw/data/staging/stgplayers.parquet",
+          "_comment optional-field previousCopyPath" : "/dw/data/staging/stgpbp.prev.parquet"
+        },
+        "schema" :
+        [
+          { "colName" : "name", "colType" : "String", "isUniqueKey" : true },
+          { "colName" : "first_name", "colType" : "String" },
+          { "colName" : "last_name", "colType" : "String" },
+          { "colName" : "birth_city", "colType" : "String" },
+          { "colName" : "birth_state", "colType" : "String" },
+          { "colName" : "birth_country", "colType" : "String" },
+          { "colName" : "birth_date", "colType" : "String", "isUniqueKey" : true },
+          { "colName" : "college", "colType" : "String" },
+          { "colName" : "draft_team", "colType" : "String" },
+          { "colName" : "draft_round", "colType" : "String" },
+          { "colName" : "draft_pick", "colType" : "String" },
+          { "colName" : "draft_year", "colType" : "Integer" },
+          { "colName" : "position", "colType" : "String" },
+          { "colName" : "height", "colType" : "String" },
+          { "colName" : "weight", "colType" : "Integer" },
+          { "colName" : "death_date", "colType" : "String" },
+          { "colName" : "death_city", "colType" : "String" },
+          { "colName" : "death_state", "colType" : "String" },
+          { "colName" : "death_country", "colType" : "String" },
+          { "colName" : "year_start", "colType" : "Integer" },
+          { "colName" : "year_end", "colType" : "Integer" }
+        ]
+      },
+      {
+        "name" : "Load ARMReset table",
+        "isActive": true,
+        "fileLoadControl" :
+        {
+          "parquet" : {},
+          "dir" : "/dw/data/control/"
+        },
+        "dbmsSource" :
+        {
+          "effectiveDate" : "2020-05-13",
+          "sqlServer" : { },
+          "connectionUri" : "jdbc:sqlserver://DESKTOP\\SQLSERVER2019:1433;database=testdb;integratedSecurity=true;",
+          "sourceTable" : "( SELECT *, CONVERT( VARCHAR( 200), CONVERT( BINARY(8), [RowVersion], 1 ), 2 ) AS RowVersionStr FROM [dbo].[ARMResetTest] ) as tbl",
+          "numberOfPartitions" : 10,
+          "incrementalLoad" :
+          {
+            "sourceTableChanges" : "( SELECT *, CONVERT( VARCHAR( 200), CONVERT( BINARY(8), [RowVersion], 1 ), 2 ) AS RowVersionStr FROM [dbo].[ARMResetTest] WHERE [RowVersion] > 0x<@RowVersionStr@> ) AS tbl",
+            "fileDestinationColumnMarkerPatterns" :
+            {
+              "left" : "\\<\\@", "right" :  "\\@\\>"
+            }
+          }
+        },
+        "fileDestination" :
+        {
+          "isVersioned" : true,
+          "parquet" : {},
+          "path" : "C:\\staging\\ARMResetTest.parquet",
+          "previousCopyPath" : "C:\\staging\\ARMResetTest.prev.parquet"
+        },
+        "schema" :
+        [
+          { "colName" : "SecId", "isUniqueKey" : true, "isPartitionColumn" : true },
+          { "colName" : "AdjDt", "isUniqueKey" : true }
+        ]
+      }
+    ]
+  }
+}

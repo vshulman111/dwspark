@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/../NFLDataSourceRecon/NFLDataSourceRecon.iml" filepath="$PROJECT_DIR$/../NFLDataSourceRecon/NFLDataSourceRecon.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../NFLDwEtl/NFLDwEtl.iml" filepath="$PROJECT_DIR$/../NFLDwEtl/NFLDwEtl.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../WorkdayDw/WorkdayDw.iml" filepath="$PROJECT_DIR$/../WorkdayDw/WorkdayDw.iml" />
+    </modules>
+  </component>
+</project>

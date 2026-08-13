@@ -1,0 +1,728 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Data Warehouse ETL Configuration v1",
+  "description": "Defines fields for the Data Warehouse application that uses dw Etl library. The configuration JSON file can have other fields at the top level in addition to dwEtl object.",
+  "type": "object",
+  "properties": {
+    "dwEtl": {
+      "type": "object",
+      "description": "Configuration for DW Etl process",
+      "properties": {
+        "dwEtlConfigVersion": {
+          "type": "string",
+          "description": "version of DW ETL configuration",
+          "enum": [
+            "1"
+          ]
+        },
+        "isDebugDwLib": {
+          "type": "boolean",
+          "description": "If the value is true, there will be some dataframe related output sent to the standard output from the library causing slowdown in job execution."
+        },
+        "jobType": {
+          "type": "string",
+          "description": "The ETL process consists of two parts – ETL dimensions and ETL facts. jobType is used to run either both or one of these parts. The allowed values for this attribute are \"LoadDimsFacts\", or \"LoadDims\", or \"LoadFacts\". The main scenario for running ETL dimensions separate from ETL facts is loading dimensions in parallel by defining separate configurations for one or more dimensions (using isLoadFlag) and running ETL facts after - serially or in parallel.",
+          "enum": [
+            "LoadDimsFacts",
+            "LoadDims",
+            "LoadFacts"
+          ]
+        },
+        "isInitialLoad": {
+          "type": "boolean",
+          "description": "The flag indicates if the load is initial or subsequent. If the load is initial, then the existing files for dimensions and/or facts are deleted. Which ones are deleted depends on the jobType -  for \"LoadDimsFacts\" both dimensions and fact files are deleted, for \"LoadDims\" - dimensions are deleted, and for \"LoadFacts\" - fact files are deleted.\n\nThere is one use case when this flag should be set to true for ongoing loads: when dimension or fact has to be recreated every time based on current sources, i.e., when rows for non-existent natural keys deleted and all attributes are Type 1.\n"
+        },
+        "rerunEtlAfter": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The attribute is used to rerun subsequent load for effective dates processed earlier after the timestamp value specified based on the log."
+        },
+        "fileEtlLog": {
+          "type": "object",
+          "description": "When this attribute is defined, the loader will create a file with summary info for each load. The info includes record counts, description of source and destination, and the action timing.",
+          "properties": {
+            "parquet": {
+              "type": "object",
+              "description": "File type is parquet for load control."
+            },
+            "path": {
+              "type": "string",
+              "description": "A parquet file path."
+            }
+          },
+          "patternProperties": {
+            "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+          },
+          "required": [
+            "parquet",
+            "path"
+          ],
+          "unevaluatedProperties": false
+        },
+        "stgSources": {
+          "type": "array",
+          "description": "Staging sources. This are sources for loading dimensions and fact tables.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "moniker": {
+                "type": "string",
+                "description": "Staging source moniker is a unique identifier of a staging source. It is used as view name for respective source in Spark SQL."
+              },
+              "description": {
+                "type": "string"
+              },
+              "applicationSpecific": {
+                "type": "object",
+                "unevaluatedProperties": true
+              },
+              "effectiveDateColumn": {
+                "type": "string",
+                "description": "A column in a staging source data that is effective date for the current staging source."
+              },
+              "isDefaultForEffectiveDate": {
+                "type": "boolean",
+                "description": "There can be only one default effective date across all staging sources. When is set to true it designates effective date in current staging source as a default effective date."
+              },
+              "timestampColumn": {
+                "type": "string",
+                "description": "A column in a staging source data that is has load timestamp. Timestamp can be used for incremental processing of dimension in subsequent ETL runs."
+              },
+              "effectiveDateRule": {
+                "type": "string",
+                "description": "An attribute to specify how to derive effective date from effectiveDateColumn. The values can be\n \"DISTINCT\" - only the dates in the stg source are used in the etl,\n \"WEEKDAYS\" - all days between min and max values excluding weekends, or\n \"ALL\" - all days between min and max values",
+                "enum": [
+                  "ALL",
+                  "DISTINCT",
+                  "WEEKDAYS"
+                ]
+              },
+              "fileSource": {
+                "description": "Defines file staging source.",
+                "type": "object",
+                "properties": {
+                  "parquet": {
+                    "type": "object"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "A parquet file path."
+                  }
+                },
+                "patternProperties": {
+                  "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                },
+                "required": [
+                  "parquet",
+                  "path"
+                ],
+                "unevaluatedProperties": false
+              }
+            },
+            "patternProperties": {
+              "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+            },
+            "required": [
+              "moniker",
+              "fileSource"
+            ],
+            "unevaluatedProperties": false
+          }
+        },
+        "dimAuthority": {
+          "type": "object",
+          "description": "A section of specifications for attributes common to all dimensions.",
+          "properties": {
+            "packageName": {
+              "type": "string",
+              "description": "Package name is used to dynamically create an instance of a dimension class. All dimension classes described in a configuration must be defined in the same package."
+            },
+            "dimensionNamePattern": {
+              "type": "string",
+              "description": "A regular expression pattern for dimension name. Each dimension’s name must match this pattern."
+            },
+            "fileDimensionsDestination": {
+              "type": "object",
+              "description": "A section to describe a dimension destination file. The file for each dimension will be created and maintained by the ETL library.",
+              "properties": {
+                "parquet": {
+                  "type": "object",
+                  "description": "File type is parquet for dimension destination."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Defines destination file path for all dimensions",
+                  "pattern":  "^.*___.*$",
+                  "customMessage": {
+                    "pattern": "The file name in path for fileDimensionsDestination must contain three underscores as a placeholder for the dimension name"
+                  }
+                },
+                "previousCopyPath": {
+                  "type": "string",
+                  "description": "If defined, DW ETL will preserve a previous version of the dimension and place it in this path. A file name must contain three underscores as a placeholder for the dimension name",
+                  "pattern":  "^.*___.*$",
+                  "customMessage": {
+                    "pattern": "The file name in previousCopyPath must contain three underscores which will be replaced with the name of the dimension"
+                  }
+                }
+              },
+              "patternProperties": {
+                "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+              },
+              "required": [
+                "parquet",
+                "path"
+              ],
+              "unevaluatedProperties": false
+            }
+          },
+          "patternProperties": {
+            "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+          },
+          "required": [
+            "packageName",
+            "dimensionNamePattern",
+            "fileDimensionsDestination"
+          ],
+          "unevaluatedProperties": false
+        },
+        "dimensions": {
+          "type": "array",
+          "description": "Describes dimensions. Since dimensions can be loaded in parallel via independent ETL runs this array can have some dimensions absent or inactive (i.e., with 'isLoad' flag set to false)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name of the dimension. Must match the pattern defined in dimensionNamePattern field."
+              },
+              "isLoad": {
+                "type": "boolean",
+                "description": "If set to false the dimension will not be loaded. Can be used to create separate configurations to load specific dimensions or during development to skip the load of already tested dimensions."
+              },
+              "stgSourcesMonikers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Monikers of staging sources used to load this dimension. DW ETL will call a loadDim override for each source. If there are no staging sources loadDimm will be called just once."
+              },
+              "dimSources": {
+                "type": "array",
+                "description": "Other dimensions that are sources for loading this dimension. A dimension that is a source must be loaded prior to loading this dimension.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Name of the dimension."
+                    },
+                    "schema": {
+                      "type": "array",
+                      "description": "Schema lists a subset of columns used to load current dimension (used for optimization to reduce number of columns). If schema is absent all columns can be referenced in loading current dimendion. ",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "colName": {
+                            "type": "string"
+                          }
+                        },
+                        "patternProperties": {
+                          "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                        },
+                        "required": [
+                          "colName"
+                        ],
+                        "unevaluatedProperties": false
+                      }
+                    },
+                    "unevaluatedProperties": false
+                  },
+                  "patternProperties": {
+                    "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "unevaluatedProperties": false
+                }
+              },
+              "schema": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "colName": {
+                      "type": "string"
+                    },
+                    "colType": {
+                      "type": "string",
+                      "enum": [ "Short", "Integer", "Long", "Date", "Timestamp", "String", "Double" ]
+                    },
+                    "isKey": {
+                      "type": "boolean"
+                    },
+                    "isSurrogateKey": {
+                      "type": "boolean"
+                    },
+                    "unknownValue": {
+                      "type": ["string", "null"]
+                    },
+                    "isNaturalKey": {
+                      "type": "boolean"
+                    },
+                    "scdType": {
+                      "description": "Slowly changing dimension column modeling technique: 0 - Retain Original Non-Null Value, 1 - Overwrite, 2 - Add New Row, 3 - Retain Latest Non-Null Value. Default - 1",
+                      "type": "number",
+                      "enum": [0,1,2,3],
+                      "customMessage": {
+                        "enum": "The allowed values for \"scdType\" property are 0, 1(default), 2 or 3. 0 - Retain Original Non-Null Value, 1 - Overwrite, 2 - Add New Row, 3 - Retain Latest Non-Null Value"
+                      }
+                    }
+                  },
+                  "patternProperties": {
+                    "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                  },
+                  "required": [
+                    "colName",
+                    "colType"
+                  ],
+                  "allOf": [
+                    {
+                      "if": {
+                        "properties": {
+                          "isKey": {
+                            "const": true
+                          }
+                        },
+                        "required": ["isKey"]
+                      },
+                      "then": {
+                        "description": "'scdType' is not applicable for a key column",
+                        "not": {
+                          "required": ["scdType"]
+                        },
+                        "customMessage": {
+                          "not": "\"scdType\" is not applicable when \"isKey\" is true "
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "isNaturalKey": {
+                            "const": true
+                          }
+                        },
+                        "required": ["isNaturalKey"]
+                      },
+                      "then": {
+                        "description": "'scdType' is not applicable for a Natural Key column",
+                        "not": {
+                          "required": ["scdType"]
+                        },
+                        "customMessage": {
+                          "not": "\"scdType\" is not applicable when \"isNaturalKey\" is true "
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+						"properties": {
+                          "isKey": {
+                            "const": true
+                          }
+                        },
+                        "required": ["isKey"]
+                      },
+                      "then": {
+                        "description": "'isSurrogateKey' and 'unknownValue' are required for a key column",
+                        "required": ["unknownValue", "isSurrogateKey"],
+                        "customMessage": {
+                          "required": "\"isSurrogateKey\" and \"unknownValue\" attributes are required when \"isKey\" is true "
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "isNaturalKey": {
+                            "const": true
+                          }
+                        },
+                        "required": ["isNaturalKey"]
+                      },
+                      "then": {
+                        "description": "'unknownValue' is required for a natural key column",
+                        "required": ["unknownValue"],
+                        "customMessage": {
+                          "required": "\"unknownValue\" is required for a natural key column, e.g., ... \"isNaturalKey\" : true, \"unknownValue\" : \"some-value\" or null ... "
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "isSurrogateKey": {
+                            "const": true
+                          }
+                        },
+                        "required": [
+                          "isSurrogateKey"
+                        ]
+                      },
+                      "then": {
+                        "properties": {
+                          "colType": {
+                            "description": "'colType' value must be Long if the column is Surrogate key as surrogate key is derived from Spark monotonically_increasing_id",
+                            "const": "Long",
+                            "customMessage": {
+                              "const": "\"colType\" must be \"Long\" when dimension key is a surrogate key, i.e., ... \"colType\": \"Long\", \"isSurrogateKey\" : true, ... "
+                            }
+                          }
+                        },
+                        "required": ["colType"]
+                      }
+                    }
+                    ],
+                  "unevaluatedProperties": false
+                },
+                "allOf" : [
+                  {
+                    "contains": {
+                      "type": "object",
+                      "required": [
+                        "isNaturalKey"
+                      ],
+                      "properties": {
+                        "isNaturalKey": {
+                          "const": true
+                        }
+                      }
+                    },
+                    "minContains": 1,
+                    "customMessage": {
+                      "contains": "Dimension's schema does not have natural key defined. At least one column must have \"isNaturalKey\" flag set to true, i.e., ... \"isNaturalKey\" : true, ... "
+                    }
+                  },
+                  {
+                    "contains": {
+                      "type": "object",
+                      "required": [
+                        "isKey"
+                      ],
+                      "properties": {
+                        "isKey": {
+                          "const": true
+                        }
+                      }
+                    },
+                    "minContains": 1,
+                    "maxContains": 1,
+                    "customMessage": {
+                      "contains": "Dimension's schema must have one dimension key defined. One and only one column must/can have \"isKey\" flag set to true, i.e., ... \"isKey\" : true, ... "
+                    }
+                  }
+                  ],
+                "customMessage": {
+                  "minItems": "Dimension's schema does not have any columns defined. It must have at least one column"
+                }
+              },
+              "unevaluatedProperties": false
+            },
+            "required": [
+              "name",
+              "isLoad",
+              "schema"
+            ],
+            "patternProperties": {
+              "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+            },
+            "unevaluatedProperties": false
+          }
+        },
+        "dataMart": {
+          "type": "object",
+          "description": "A section of specifications for attributes common to all fact tables.",
+          "properties": {
+            "packageName": {
+              "type": "string",
+              "description": "Package name is used to dynamically create an instance of a Fact class."
+            },
+            "factNamePattern": {
+              "type": "string",
+              "description": "A regular expression pattern for fact table name. Each fact table’s name must match this pattern."
+            },
+            "fileFactsDestination": {
+              "type": "object",
+              "description": "A section to describe a fact table destination file. The file for each fact table will be created and maintained by the ETL library.",
+              "properties": {
+                "parquet": {
+                  "type": "object",
+                  "description": "File type is parquet for fact table destination."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Defines destination file path for all fact tables",
+                  "pattern":  "^.*___.*$",
+                  "customMessage": {
+                    "pattern": "The file name in path for fileFactsDestination must contain three underscores which will be replaced with the name of the fact table"
+                  }
+                },
+                "pathWithKeySetters": {
+                  "type": "string",
+                  "description": "If defined, DW ETL will create fact table with columns - natural keys - used to set fact table keys. Used primarily during development, but can be used in production for troubleshooting.",
+                  "pattern":  "^.*___.*$",
+                  "customMessage": {
+                    "pattern": "The file name in pathWithKeySetters for fileFactsDestination must contain three underscores which will be replaced with the name of the fact table"
+                  }
+                }
+              },
+              "patternProperties": {
+                "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+              },
+              "required": [
+                "parquet",
+                "path"
+              ],
+              "unevaluatedProperties": false
+            }
+          },
+          "patternProperties": {
+            "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+          },
+          "required": [
+            "packageName",
+            "factNamePattern",
+            "fileFactsDestination"
+          ],
+          "unevaluatedProperties": false
+        },
+        "facts": {
+          "type": "array",
+          "description": "Describes facts. Since facts can be loaded in parallel via independent ETL runs this array can have some dimensions absent or inactive (i.e., with 'isLoad' flag set to false)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name of the dimension. Must match the pattern defined in 'dimAuthority.dimensionNamePattern' field."
+              },
+              "isLoad": {
+                "type": "boolean",
+                "description": "If set to false the dimension will not be loaded."
+              },
+              "processingMode": {
+                "type": "string",
+                "description": "Type of processing for fact table.",
+                "enum": [
+                  "REPLACE",
+                  "MERGE",
+                  "ADD",
+                  "MERGE_PARTITION",
+                  "REPLACE_PARTITION"
+                ]
+              },
+              "stgSourcesMonikers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Monikers of staging sources used to load this fact table. DW ETL will call a loadFact override for each source. If there are no staging sources loadFact will be called just once."
+              },
+              "dimSources": {
+                "type": "array",
+                "description": "Other dimensions that are used to load this fact table. This dimensions must be distingushed from dimentions used to set key. The dimension needs to be listed here is it used to load fact values as opposed to setting keys. Dimensions to set keys are defined in schema.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Name of the dimension."
+                    },
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "colName": {
+                            "type": "string"
+                          }
+                        },
+                        "patternProperties": {
+                          "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                        },
+                        "required": [
+                          "colName"
+                        ],
+                        "unevaluatedProperties": false
+                      }
+                    },
+                    "unevaluatedProperties": false
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "patternProperties": {
+                    "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                  },
+                  "unevaluatedProperties": false
+                }
+              },
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "colName": {
+                      "type": "string"
+                    },
+                    "colType": {
+                      "type": "string",
+                      "enum": [ "Short", "Integer", "Long", "Date", "Timestamp", "String", "Double" ]
+                    },
+                    "isForPartition": {
+                      "type": "boolean"
+                    },
+                    "isMergeKey": {
+                      "type": "boolean"
+                    },
+                    "isEffDateForTypeTwo": {
+                      "type": "boolean"
+                    },
+                    "isForSettingForeignKey": {
+                      "type": "boolean"
+                    },
+                    "foreignKey": {
+                      "type": "string"
+                    },
+                    "underlyingDim": {
+                      "type": "string"
+                    },
+                    "underlyingDimCol": {
+                      "type": "string"
+                    },
+                    "isMeasure": {
+                      "type": "boolean"
+                    }
+                  },
+                  "patternProperties": {
+                    "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                  },
+                  "allOf": [
+                    {
+                      "if": {
+                        "required": ["isForSettingForeignKey"]
+                      },
+                      "then": {
+                        "description": "If this attribute of a column is set to true, there should be three more properties defined: foreignKey, underlyingDim, and underlyingDimCol. The underlyingDimCol is optional.",
+                        "required": ["foreignKey", "underlyingDim"],
+                        "customMessage": {
+                          "required": "\"foreignKey\", \"underlyingDim\", and optionally \"underlyingDimCol\" are required when \"isForSettingForeignKey\" is true. If \"underlyingDimCol\" is not defined then setForeignKeyOnFactTable method must be overridden in a class of a dimension defined in \"underlyingDim\""
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "isMeasure": {
+                            "const": true
+                          }
+                        },
+                        "required": ["isMeasure"]
+                      },
+                      "then": {
+                        "properties": {
+                          "colType": {
+                            "enum": ["Double" , "Short", "Integer", "Long"],
+                            "customMessage": {
+                              "enum": "For columns that are measures (\"isMeasure\": true) the column type can only be one of the numeric types: \"Double\" , \"Short\", \"Integer\", \"Long\" "
+                            }
+                          }
+                        },
+                        "required": ["colType"]
+                      }
+                    }
+                  ],
+                  "required": [
+                    "colName",
+                    "colType"
+                  ],
+                  "unevaluatedProperties": false
+                }
+              },
+              "unevaluatedProperties": false
+            },
+            "patternProperties": {
+              "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+            },
+            "required": [
+              "name",
+              "isLoad",
+              "schema"
+            ],
+            "unevaluatedProperties": false
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "jobType": {
+                "enum": [
+                  "LoadDimsFacts",
+                  "LoadDims"
+                ]
+              }
+            },
+            "required": [
+              "jobType"
+            ]
+          },
+          "then": {
+            "required": [
+              "dimAuthority",
+              "dimensions"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "jobType": {
+                "enum": [
+                  "LoadDimsFacts",
+                  "LoadFacts"
+                ]
+              }
+            },
+            "required": [
+              "jobType"
+            ]
+          },
+          "then": {
+            "required": [
+              "dataMart",
+              "facts"
+            ]
+          }
+        }
+      ],
+      "patternProperties": {
+        "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+      },
+      "required": [
+        "dwEtlConfigVersion",
+        "jobType",
+        "isInitialLoad"
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "required": [
+    "dwEtl"
+  ],
+  "unevaluatedProperties": true
+}

@@ -1,0 +1,134 @@
+{
+  "sparkParams":
+  {
+    "sessionAppName": "Spark Dat Source Loader",
+    "sessionConfigMaster": "local",
+    "sessionConfigDriverHost": "localhost",
+    "optional sessionConfigLocalDir": "C:\\ASCODE\\DATA\\Temp"
+  },
+  "sourceLoad":
+  {
+    "_comment is passed schema validation": true,
+    "sourceLoadConfigVersion": "1",
+    "logFileDir": "C:\\ASCODE\\LOGS\\sourceLoad\\",
+    "loadActions":
+    [
+      {
+        "name" : "Load ARMReset table",
+        "isActive": false,
+        "isDebugDwLib" : false,
+        "fileLoadControl" :
+        {
+          "parquet" : {},
+          "dir" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\LoadControlNew1.parquet\\"
+        },
+        "dbmsSource" :
+        {
+          "_comment optional value isRemoveDuplicateRows": "true",
+          "effectiveDate" : "2020-05-13",
+          "_comment __connectionUri use NTLM for auth in some cases" : "jdbc:sqlserver://DESKTOP-T3QOCRG\\SQLSERVER2019:1433;database=embs;integratedSecurity=true;authenticationScheme=NTLM;domain=[your-domain]",
+          "sqlServer" : {
+            "url" : "jdbc:sqlserver://DESKTOP-T3QOCRG\\SQLSERVER2019:1433;database=embs;integratedSecurity=true;",
+            "_comment __connectionUri" : "jdbc:sqlserver://DESKTOP-T3QOCRG\\SQLSERVER2019:1433;database=embs;",
+            "dbtable" : "( SELECT *, CONVERT( VARCHAR( 200), CONVERT( BINARY(8), [RowVersion], 1 ), 2 ) AS RowVersionStr FROM [dbo].[ARMResetTest] WHERE [RowVersion] > 0x:::RowVersionStr::: ) AS tbl",
+            "numPartitions" : 10
+          },
+          "_comment __user": "sa",
+          "_comment __password": "Spark!",
+          "incrementalLoad" :
+          {
+            "_comment __1st form for_uniqueKeys" : "( SELECT SecId, AdjDt FROM [dbo].[ARMResetTest] ) AS tbl",
+            "_comment __2nd form for_uniqueKeys" : "[dbo].[ARMResetTest]",
+            "uniqueKeys" : "( SELECT SecId, AdjDt FROM [dbo].[ARMResetTest] ) AS tbl",
+            "_comment _fileDestinationColumnValue comment" : "The field between delimeters will be replaced with max or min value of corresponding column from the fileDestination",
+            "delimForWatermarkColumns": ":::"
+          }
+        },
+        "fileDestination" :
+        {
+          "isVersioned" : true,
+          "parquet" : {},
+          "path" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\ARMResetTestNew1.parquet",
+          "previousCopyPath" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\ARMResetTestNew1.prev.parquet"
+        },
+        "schema" :
+        [
+          { "colName" : "SecId", "colType" : "Integer", "isUniqueKey" : true, "isPartitionColumn" : true },
+          { "colName" : "AdjDt", "colType" : "Date", "isUniqueKey" : true }
+        ]
+      },
+      {
+        "name" : "Load ARMReset table to non-versiond file",
+        "isActive": true,
+        "isDebugDwLib" : false,
+        "fileLoadControl" :
+        {
+          "parquet" : {},
+          "dir" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\LoadControl.parquet\\"
+        },
+        "dbmsSource" :
+        {
+          "_comment optional value isRemoveDuplicateRows": true,
+          "effectiveDate" : "2020-05-10",
+          "user": "sa",
+          "password": "Spark!",
+          "sqlServer" :
+          {
+            "url" : "jdbc:sqlserver://DESKTOP-T3QOCRG\\SQLSERVER2019:1433;database=embs;encrypt=true;trustServerCertificate=true;",
+            "_comment": "when using server or windows auth need to define encrypt=true;trustServerCertificate=true; to avoid error \"PKIX path building failed\" ",
+            "_comment_sourceTable" : "[dbo].[ARMResetTest]",
+            "numPartitions" : 10
+          }
+        },
+        "fileDestination" :
+        {
+          "isVersioned" : false,
+          "parquet" : {},
+          "path" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\ARMResetTest.nonversioned.parquet",
+          "previousCopyPath" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\ARMResetTest.nonversioned.prev.parquet"
+        },
+        "schema" :
+        [
+          { "colName" : "SecId", "colType" : "Integer", "isUniqueKey" : true, "isPartitionColumn" : true },
+          { "colName" : "AdjDt", "colType" : "Date", "isUniqueKey" : true  },
+          { "colName" : "NumLoans", "colType" : "Integer", "isExcludeFromVersioning" : true }
+        ]
+      },
+      {
+        "name" : "Test Oracle driver",
+        "isActive": false,
+        "isDebugDwLib" : false,
+        "fileLoadControl" :
+        {
+          "parquet" : {},
+          "dir" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\NewLoadControl.parquet\\"
+        },
+        "dbmsSource" :
+        {
+          "effectiveDate" : "2020-05-13",
+          "oracle" : {
+            "url" : "jdbc:sqlserver://DESKTOP-T3QOCRG\\SQLSERVER2019:1433;database=embs;integratedSecurity=true;",
+            "_comment __connectionUri" : "jdbc:sqlserver://DESKTOP-T3QOCRG\\SQLSERVER2019:1433;database=embs;",
+            "dbtable" : "( SELECT *, CONVERT( VARCHAR( 200), CONVERT( BINARY(8), [RowVersion], 1 ), 2 ) AS RowVersionStr FROM [dbo].[ARMResetTest] ) as tbl",
+            "numPartitions" : 10
+          },
+          "user": "sa",
+          "password": "Spark!"
+        },
+        "fileDestination" :
+        {
+          "isVersioned" : true,
+          "parquet" : {},
+          "path" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\ARMResetTest.parquet",
+          "previousCopyPath" : "C:\\ASCODE\\DATA\\NFL\\STAGING\\ARMResetTest.prev.parquet"
+        },
+        "schema" :
+        [
+          { "colName" : "SecId", "colType" : "Integer", "isUniqueKey": true, "isPartitionColumn" : true },
+          { "colName" : "AdjDt", "colType" : "Date", "isUniqueKey": true }
+        ]
+      }
+    ]
+  }
+}
+

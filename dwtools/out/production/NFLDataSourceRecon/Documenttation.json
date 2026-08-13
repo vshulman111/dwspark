@@ -1,0 +1,199 @@
+{
+  "sparkParams":
+  {
+    "sessionAppName": "Data Source Reconciliation",
+    "sessionConfigMaster": "local",
+    "sessionConfigDriverHost": "localhost"
+  },
+  "sourceCompare":
+  {
+    "sourceCompareConfigVersion": "1",
+    "logFileDir": "/dw/data/logs/sourceComparer",
+    "compareScenarios":
+    [
+      {
+        "name" : "Compare Team file",
+        "isActive": false,
+        "isDebugDwLib" : false,
+        "floatCompareThreshold" : 0.01,
+        "compareResult" :
+        {
+          "file" :
+          {
+            "dir": "/dw/data/compare-result/",
+            "csv" :
+            {
+              "header" : true
+            }
+          },
+          "schema" :
+          [
+            { "colName" : "TeamName", "isUniqueKey" : true },
+            { "colName" : "SeasonAbbreviation", "isUniqueKey" : true },
+            { "colName" : "SeasonYear", "isInclude" : true }
+          ]
+        },
+        "leftSource" :
+        {
+          "moniker" : "Original",
+          "file" :
+          {
+            "path": "/dw/data/nfl/team-info/nfl-teams.csv",
+            "csv" :
+            {
+              "header" : true
+            }
+          },
+          "schema" :
+          [
+            { "colName" : "TeamName","colType" : "String" },
+            { "colName" : "SeasonAbbreviation", "colType" : "String" },
+            { "colName" : "SeasonYear", "colType" : "Integer" },
+            { "colName" : "SeasonTeamName", "colType" : "String" },
+            { "colName" : "ActiveSince", "colType" : "Integer" }
+          ],
+          "query" :
+          {
+            "sql": "SELECT TeamName, SeasonAbbreviation, SeasonYear FROM <SOURCE>",
+            "sourceNamePlaceholder": "<SOURCE>"
+          }
+        },
+        "rightSource" :
+        {
+          "moniker" : "SQL Server",
+          "dbms" :
+          {
+            "sqlServer" : { },
+            "connectionUri" : "jdbc:sqlserver://my-server\\SQLSERVER2019:1433;database=my-db-name;integratedSecurity=true;",
+            "sourceTable" : "( SELECT *, CONVERT( VARCHAR( 200), CONVERT( BINARY(8), [RowVersion], 1 ), 2 ) AS RowVersionStr FROM [dbo].[ARMResetTest] ) as tbl",
+            "numberOfPartitions" : 10
+          },
+          "query" :
+          {
+            "sql" : "SELECT TeamName, SeasonAbbreviation, SeasonYear FROM <SOURCE>",
+            "sourceNamePlaceholder" : "<SOURCE>"
+          }
+        }
+      },
+      {
+        "name" : "Compare with SQL Server",
+        "isActive": true,
+        "isDebugDwLib" : false,
+        "floatCompareThreshold" : 0.01,
+        "compareResult" :
+        {
+          "file" :
+          {
+            "dir": "/dw/data/compare-result/",
+            "csv" :
+            {
+              "header" : true
+            }
+          },
+          "schema" :
+          [
+            { "colName" : "SecId", "isUniqueKey" : true },
+            { "colName" : "AdjDt", "isUniqueKey" : true },
+            { "colName" : "RPB" },
+            { "colName" : "LoanLifeFloorLo" },
+            { "colName" : "NumLoans" },
+            { "colName" : "EffDt", "isInclude" : false },
+            { "colName" : "UpdSrc" }
+          ]
+        },
+        "leftSource" :
+        {
+          "moniker" : "SQL Server",
+          "dbms" :
+          {
+            "sqlServer" : { },
+            "connectionUri" : "jdbc:sqlserver://my-server\\SQLSERVER2019:1433;database=my-db-name;integratedSecurity=true;",
+            "_comment__connectionUri" : "jdbc:sqlserver://DESKTOP-T3QOCRG\\SQLSERVER2019:1433;database=embs;",
+            "_comment__user": "my_user_id",
+            "_comment__password": "my_password",
+            "sourceTable" : "( SELECT *, CONVERT( VARCHAR( 200), CONVERT( BINARY(8), [RowVersion], 1 ), 2 ) AS RowVersionStr FROM [dbo].[ARMResetTest] ) as tbl",
+            "numberOfPartitions" : 10
+          },
+          "schema" :
+          [
+            { "colName" : "SecId", "isPartitionColumn" : true }
+          ],
+          "query" :
+          {
+            "sql" : "SELECT SecId,AdjDt,RPB,LoanLifeFloorLo,NumLoans,EffDt,UpdSrc FROM <SOURCE> ",
+            "sourceNamePlaceholder" : "<SOURCE>"
+          }
+        },
+        "rightSource" :
+        {
+          "moniker" : "Parquet file",
+          "file" :
+          {
+            "path" : "/dw/data/data/nfl/staging/armresettest.parquet",
+            "parquet" : {}
+          },
+          "query" :
+          {
+            "sql": "SELECT SecId,AdjDt,RPB,LoanLifeFloorLo,NumLoans,EffDt,UpdSrc FROM @RIGHT_SOURCE WHERE _SrcDt_EffectiveDateEnd = '2099-01-01'",
+            "sourceNamePlaceholder": "@RIGHT_SOURCE"
+          }
+        }
+      },
+      {
+        "name" : "Compare to itself parquet",
+        "isActive": true,
+        "isDebugDwLib" : false,
+        "floatCompareThreshold" : 0.01,
+        "compareResult" :
+        {
+          "file" :
+          {
+            "dir": "/dw/data/compare-result/",
+            "csv" :
+            {
+              "header" : true
+            }
+          },
+          "schema" :
+          [
+            { "colName" : "SecId", "isUniqueKey" : true },
+            { "colName" : "AdjDt", "isUniqueKey" : true },
+            { "colName" : "RPB" },
+            { "colName" : "LoanLifeFloorLo" },
+            { "colName" : "NumLoans" },
+            { "colName" : "EffDt", "isInclude" : false },
+            { "colName" : "UpdSrc" }
+          ]
+        },
+        "leftSource" :
+        {
+          "moniker" : "left Parquet file",
+          "file" :
+          {
+            "path": "/dw/data/data/nfl/staging/armresettest.parquet",
+            "parquet" : {}
+          },
+          "query" :
+          {
+            "sql": "SELECT SecId,AdjDt,RPB,LoanLifeFloorLo,NumLoans,EffDt,UpdSrc FROM @RIGHT_SOURCE WHERE _SrcDt_EffectiveDateEnd = '2099-01-01'",
+            "sourceNamePlaceholder": "@RIGHT_SOURCE"
+          }
+        },
+        "rightSource" :
+        {
+          "moniker" : "right Parquet file",
+          "file" :
+          {
+            "path" : "/dw/data/data/nfl/staging/armresettest.parquet",
+            "parquet" : {}
+          },
+          "query" :
+          {
+            "sql": "SELECT SecId,AdjDt,IF( SecId = 9997, RPB - 1, RPB) AS RPB,LoanLifeFloorLo,IF( SecId = 1388360, NumLoans + 4, NumLoans ) AS NumLoans,EffDt,UpdSrc FROM @RIGHT_SOURCE WHERE SecId NOT IN ( 9998,9999)",
+            "sourceNamePlaceholder": "@RIGHT_SOURCE"
+          }
+        }
+      }
+    ]
+  }
+}
