@@ -8,19 +8,43 @@
     <artifactId>dwtools_2.12-3.3</artifactId>
     <version>1.0.0</version>
 
+	<name>Data Warehouse Tools For Spark</name>
+	<description>dwtools used to implement Data Warehouse that follows Kimball Dimensional modeling approach on Spark</description>
+	<url>https://www.dbtimes.com/frameworks.htm</url>
+
+	<licenses>
+		<license>
+			<name>The Apache Software License, Version 2.0</name>
+			<url>https://apache.org</url>
+		</license>
+	</licenses>
+
+	<developers>
+		<developer>
+			<name>Victor Shulman</name>
+			<email>victor@dbtimes.com</email>
+			<organization>DBTimes</organization>
+			<organizationUrl>https://dbtimes.com</organizationUrl>
+		</developer>
+	</developers>
+
+	<scm>
+		<!-- The read-only connection string for Maven to fetch metadata -->
+		<connection>scm:git:git://://github.com</connection>
+		
+		<!-- The developer connection string for SSH access -->
+		<developerConnection>scm:git:ssh://://github.com</developerConnection>
+		
+		<!-- The public browser link targeted specifically at the dwtools directory -->
+		<url>https://github.com/vshulman111/dwspark/tree/main/dwtools</url>
+	</scm>
+
     <properties>
         <spark.version>3.3.2</spark.version>
         <scala.version.major>2.12</scala.version.major>
         <scala.version.minor>15</scala.version.minor>
         <scala.version>${scala.version.major}.${scala.version.minor}</scala.version>
     </properties>
-    <repositories>
-        <repository>
-            <id>project.local</id>
-            <name>JarsForSparkProjects</name>
-            <url>file:${project.basedir}/../jars</url>
-        </repository>
-    </repositories>
 
     <dependencies>
         <dependency>
@@ -111,11 +135,30 @@
                             <goal>testCompile</goal>
                         </goals>
                     </execution>
+					<!-- Generates Scaladoc JARs -->
+					<execution>
+						<id>attach-scaladocs</id>
+						<goals>
+							<goal>doc-jar</goal>
+						</goals>
+					</execution>
                 </executions>
                 <configuration>
                     <scalaVersion>${scala.version}</scalaVersion>
                 </configuration>
             </plugin>
+			<!-- Generates Source JARs -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+				<version>3.3.1</version>
+				<executions>
+					<execution>
+						<id>attach-sources</id>
+						<goals><goal>jar-no-fork</goal></goals>
+					</execution>
+				</executions>
+			</plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -126,6 +169,33 @@
                     <target>1.8</target> -->
                 </configuration>
             </plugin>
+			
+		
+			<!--  Automatically signs your files using the GPG key you made earlier -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-gpg-plugin</artifactId>
+				<version>3.2.4</version>
+				<executions>
+					<execution>
+						<id>sign-artifacts</id>
+						<phase>verify</phase>
+						<goals><goal>sign</goal></goals>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- 4. Central Portal Deployment Plugin -->
+			<plugin>
+				<groupId>org.sonatype.central</groupId>
+				<artifactId>central-publishing-maven-plugin</artifactId>
+				<version>0.11.0</version>
+				<extensions>true</extensions>
+				<configuration>
+					<publishingServerId>central</publishingServerId>
+				</configuration>
+			</plugin>			
+			
             <plugin>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.7.1</version>
