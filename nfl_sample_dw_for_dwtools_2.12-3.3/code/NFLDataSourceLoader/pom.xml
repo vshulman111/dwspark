@@ -91,7 +91,7 @@
         <dependency>
             <groupId>com.dbtimes</groupId>
             <artifactId>dwtools_2.12-3.3</artifactId>
-            <version>1.0.0</version>
+            <version>1.0.1</version>
         </dependency>
 
     </dependencies>
