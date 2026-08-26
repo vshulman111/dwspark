@@ -395,27 +395,31 @@ private [dw] object FileHelper {
       false
   }
 
-  private[dw] def createFileNameWithCurrentTimestamp(filePathDest: String, sourceFilePathOrUrl: String, defaultFileName: String): String = {
-    val fileNameInUrlWithoutExtension =
+  private[dw] def createFileNameWithCurrentTimestamp(filePathDest: String, sourceFilePathOrUrl: String, defaultFileName: String, defaultFileExtension: String = ""): String = {
+    val ( fileNameInUrlWithoutExtension, fileExtension ) =
       try {
-        sourceFilePathOrUrl.split(Array('/', '\\'))
+        val fileNameWithExtension = sourceFilePathOrUrl.split(Array('/', '\\'))
           .last
-          .split('.')(0)
+        val fileNameAndExtension = fileNameWithExtension.split('.')
+
+        if ( fileNameAndExtension.length > 1 )
+          ( fileNameAndExtension.dropRight(1).mkString( "." ), fileNameAndExtension.last )
+        else
+          ( fileNameAndExtension.head, defaultFileExtension )
       }
       catch {
-        case e: Exception => defaultFileName
+        case e: Exception => ( defaultFileName, defaultFileExtension )
       }
 
     val fileName = FileHelper.makePath(filePathDest,
       FileHelper.sanitizeFileName(fileNameInUrlWithoutExtension
-        + " _"
+        + "_"
         + new SimpleDateFormat("yyyyMMdd_hhmmss").format(Calendar.getInstance().getTime())
-        + ".csv")
+        + ( if( fileExtension.nonEmpty ) "." + fileExtension else fileExtension ) )
     )
 
     fileName
   }
-
   /**
    *
    * @param csvFileName - this file may or may not have an extension

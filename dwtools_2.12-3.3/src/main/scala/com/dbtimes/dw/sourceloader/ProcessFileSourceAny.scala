@@ -101,11 +101,7 @@ private[sourceloader] trait ProcessFileSourceAny {
   private[sourceloader] def moveFileToProcessedDir(action: LoadAction, sourceFilePath: String): Unit = {
     if (action.getProcessedFilesDir.isDefined) {
       val fileName = FilenameUtils.getName(sourceFilePath)
-      val processedFileName = action.getProcessedFilesDir.get +
-        fileName +
-        "_processed_" +
-        new SimpleDateFormat("yyyyMMdd_hhmmss").format(Calendar.getInstance().getTime())
-
+      val processedFileName = FileHelper.createFileNameWithCurrentTimestamp( action.getProcessedFilesDir.get, fileName, "source_file_processed" )
       val spark = SparkSession.builder().getOrCreate() // this gets previously created session
       val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
       fs.rename(

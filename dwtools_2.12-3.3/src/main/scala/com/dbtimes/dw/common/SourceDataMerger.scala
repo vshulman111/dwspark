@@ -1129,33 +1129,30 @@ private[dw] trait SourceDataMerger {
 
   private def mergeSourceWithNoUniqueKey(action: SourceDataAction, isInitialLoad: Boolean, dfNewData: DataFrame, dfStgOldAsOption: Option[DataFrame], effectiveDate: Date): DataFrame = {
 
+    require( !action.getIsVersioned, """Loader Internal ERROR: Merge with no unique keys was called for versioned load""")
+
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
 
     val effDateYYYY_MM_DD = getDateFormatted(effectiveDate, "yyyy-MM-dd")
 
     appLog.info("Running for effective date " + effDateYYYY_MM_DD)
 
-    val dfResult = if (!action.getIsVersioned) {
-      appLog.info("Running load for non-versioned data source with no unique keys")
-      // if (action.getIsFileDestination) saveNewStgFile(action, dfNewData, appLog) // Just create anew file by overwriting the existing one
-      dfNewData
-    }
-    else if (isInitialLoad) { // i.e., versioned and initial load
-      appLog.info("Running initial load for versioned data source with no unique keys")
+    val dfResult = if (isInitialLoad) { // i.e., non-versioned and initial load
+      appLog.info("Running initial load for non-versioned data")
       // if (action.getIsFileDestination) saveNewStgFile(action, dfNewData, appLog)
       dfNewData
     }
-    else { // i.e., versioned and subsequent load
-      appLog.info("Running subsequent load")
+    else { // i.e., non-versioned and subsequent load
+      appLog.info("Running subsequent load for non-versioned data")
       require(dfStgOldAsOption.isDefined)
-      val dfStg = dfStgOldAsOption.get
+      val dfStgOld = dfStgOldAsOption.get
       if (action.getIsDebugDwLib) {
-        appLog.info("Stg count: " + dfStg.count())
+        appLog.info("Stg count: " + dfStgOld.count())
       }
 
       // The goal  here is to create new file with needed changes and all rows that are valid
       // (as opposed to table based approach where you modify the existing table to have valid rows)
-      dfStg.createOrReplaceTempView("StgData") // This is the existing file that we want to amend to create a new one and replace the existing one with the new
+      dfStgOld.createOrReplaceTempView("StgData") // This is the existing file that we want to amend to create a new one and replace the existing one with the new
 
       val sqlExcludingCurrentEffDate
       =
@@ -1174,9 +1171,6 @@ private[dw] trait SourceDataMerger {
 
 
       // Finally merge all data frames to create a final copy
-      // For changed and deleted rows on the expire rows by setting new EffectiveDateEnd
-      // "EffectiveDateEnd" column must be the last one (unless dropping a column in the middle is as efficient as at the end)
-      // This is the result of the "else" -- not an initial load
       val dfStgNew = dfStgExcludingCurrentEffDate
         .union(dfNewData)
 

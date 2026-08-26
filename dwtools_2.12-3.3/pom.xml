@@ -6,7 +6,7 @@
 
     <groupId>com.dbtimes</groupId>
     <artifactId>dwtools_2.12-3.3</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 
 	<name>Data Warehouse Tools For Spark</name>
 	<description>dwtools used to implement Data Warehouse that follows Kimball Dimensional modeling approach on Spark</description>
@@ -36,7 +36,7 @@
 		<developerConnection>scm:git:ssh://://github.com</developerConnection>
 		
 		<!-- The public browser link targeted specifically at the dwtools directory -->
-		<url>https://github.com/vshulman111/dwspark/tree/main/dwtools</url>
+		<url>https://github.com/vshulman111/dwspark/tree/main/dwtools_2.12-3.3</url>
 	</scm>
 
     <properties>
@@ -200,6 +200,7 @@
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.7.1</version>
                 <configuration>
+					<skipAssembly>true</skipAssembly> <!-- prevents creation of jar-with-dependencies -->
                     <descriptorRefs>
                         <descriptorRef>jar-with-dependencies</descriptorRef>
                     </descriptorRefs>
