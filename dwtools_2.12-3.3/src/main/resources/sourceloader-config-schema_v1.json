@@ -1,0 +1,821 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source Loader Configuration v1",
+  "description": "Defines required field for source loader application that uses DW Source Loader library. The application configuration can have other root level fields.",
+  "type": "object",
+  "$defs": {
+    "jdbcOptions": {
+      "description": "These options are applicable to all JDBC databases - currently sql server and oracle. See https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html for details.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "dbtable": {
+          "description": "When load action defines incremental load, the attribute, if used, should have a statement that loads data incrementally based on a watermark column or columns. The watermark column is a column whose previously loaded MAX value is used to determine the new rows for the incremental load.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "query": {
+          "description": "When load action defines incremental load, the attribute, if used, should have a statement that loads data incrementally based on a watermark column or columns. The watermark column is a column whose previously loaded MAX value is used to determine the new rows for the incremental load.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "prepareQuery": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "lowerBound": {
+          "type": "string"
+        },
+        "upperBound": {
+          "type": "string"
+        },
+        "numPartitions": {
+          "type": "number"
+        },
+        "queryTimeout": {
+          "type": "number"
+        },
+        "fetchsize": {
+          "type": "number"
+        },
+        "sessionInitStatement": {
+          "type": "string"
+        },
+        "pushDownPredicate": {
+          "type": "boolean"
+        },
+        "pushDownAggregate": {
+          "type": "boolean"
+        },
+        "pushDownLimit": {
+          "type": "boolean"
+        },
+        "pushDownOffset": {
+          "type": "boolean"
+        },
+        "pushDownTableSample": {
+          "type": "boolean"
+        },
+        "keytab": {
+          "type": "string"
+        },
+        "principal": {
+          "type": "string"
+        },
+        "refreshKrb5Config": {
+          "type": "boolean"
+        },
+        "preferTimestampNTZ": {
+          "type": "boolean"
+        },
+        "hint": {
+          "type": "string"
+        }
+      },
+      "not": {
+        "required": ["partitionColumn"],
+        "description": "\"partitionColumn\" is excluded from the list of options for jdbc source since this column has to be defined in \"schema\" with \"isPartitionColumn\" flag"
+      },
+      "patternProperties": {
+        "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+      },
+      "required": [
+        "url"
+      ],
+      "customMessage": {
+        "not": "The field \"partitionColumn\" is not allowed within dbms object as it must be defined in the \"schema\" with \"isPartitionColumn\" flag set to true (that is because the tool needs column type for internal logic)."
+      },
+      "unevaluatedProperties": false
+    }
+  },
+  "properties": {
+    "sourceLoad": {
+      "type": "object",
+      "description": "Configuration for Source Loader",
+      "properties": {
+        "sourceLoadConfigVersion": {
+          "type": "string",
+          "description": "Version of a Source Loader json configuration",
+          "enum": [
+            "1"
+          ]
+        },
+        "loadActions": {
+          "type": "array",
+          "description": "Specifications for loading files or database tables into staging files. A load action is used to load one database table or one file. A single load action can also be used to load multiple files if their names follow the same pattern with a date being a variable part",
+          "items": {
+            "type": "object",
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "fileSource"
+                ],
+                "properties": {
+                  "fileSource": {
+                    "type": "object",
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "fileSystemLocation": {
+                            "type": "object",
+                            "properties": {
+                              "dir": {
+                                "type": "string"
+                              },
+                              "namePattern": {
+                                "type": "string",
+                                "description": "A regular expression of file names to process. The files can have effective date as part of the name. In that case the files are processed in a date ascending order."
+                              }
+                            },
+                            "patternProperties": {
+                              "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                            },
+                            "required": [
+                              "dir",
+                              "namePattern"
+                            ],
+                            "unevaluatedProperties": false
+                          }
+                        },
+                        "required": [
+                          "fileSystemLocation"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "internetLocation": {
+                            "type": "object",
+                            "properties": {
+                              "url": {
+                                "type": "string"
+                              },
+                              "user": {
+                                "type": "string"
+                              },
+                              "password": {
+                                "type": "string"
+                              },
+                              "isDisableSslVerification": {
+                                "type": "boolean"
+                              }
+                            },
+                            "patternProperties": {
+                              "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                            },
+                            "required": [
+                              "url"
+                            ],
+                            "unevaluatedProperties": false
+                          }
+                        },
+                        "required": [
+                          "internetLocation"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "customLocation": {
+                            "type": "object",
+                            "description": "This attribute must be defined when a user function is used to provide a path of the file to be loaded. The user function must be implemented in Scala object or Java static method. The method must take one parameter of type Option[Config]and returns a String with file path or file content (depending on \"methodReturns\" value - \"FilePath\" or \"FileData”, e.g., \n\ndef sampleForCsvFileCustomLocation( params: Option[Config] ): String = {\n  s\"/some-path/csv-file.csv\"\n}\n",
+                            "properties": {
+                              "packageName": {
+                                "type": "string"
+                              },
+                              "moduleName": {
+                                "type": "string"
+                              },
+                              "methodName": {
+                                "type": "string"
+                              },
+                              "methodReturns": {
+                                "type": "string",
+                                "description": "The type of data that the method returns: FilePath - the path of the file, FileData - the string with the file content",
+                                "enum": [
+                                  "FilePath",
+                                  "FileData"
+                                ]
+                              },
+                              "applicationSpecific": {
+                                "type": "object",
+                                "unevaluatedProperties": true
+                              }
+                            },
+                            "patternProperties": {
+                              "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                            },
+                            "required": [
+                              "moduleName",
+                              "methodName",
+                              "methodReturns"
+                            ],
+                            "unevaluatedProperties": false
+                          }
+                        },
+                        "required": [
+                          "customLocation"
+                        ]
+                      }
+                    ],
+                    "properties": {
+                      "isRemoveDuplicateRows": {
+                        "type": "boolean"
+                      },
+                      "effectiveDate": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "csv": {
+                        "type": "object",
+                        "description": "Specifies the file being loaded is .csv. This object can optionally specify any valid Spark read .csv file options used for loading csv file.\n\nExample of a configuration with no options,\n\"csv\" : { }\n\nExample of a configuration with some options,\n\"csv\" :\n{\n  \"mode\" : \"PERMISSIVE\",\n  \"header\" : true,\n  \"encoding\" : \"ISO-8859-1\"\n}\nProperties for csv file can be any of the options for Spark csv file processing. \"schema\" array must be defined if inferSchema is not set to true",
+                        "properties": {
+                          "mode": {
+                            "type": "string"
+                          },
+                          "header": {
+                            "type": "boolean"
+                          },
+                          "encoding": {
+                            "type": "string"
+                          },
+                          "dateFormat": {
+                            "type": "string"
+                          },
+                          "nullValue": {
+                            "type": "string"
+                          },
+                          "escape": {
+                            "type": "string"
+                          },
+                          "quote": {
+                            "type": "string"
+                          },
+                          "delimiter": {
+                            "type": "string"
+                          },
+                          "multiLine": {
+                            "type": "boolean"
+                          },
+                          "inferSchema": {
+                            "type": "boolean"
+                          },
+                          "trueValue": {
+                            "type": "string"
+                          },
+                          "falseValue": {
+                            "type": "string"
+                          }
+                        },
+                        "unevaluatedProperties": false
+                      },
+                      "processedFilesDir": {
+                        "type": "string"
+                      }
+                    },
+                    "patternProperties": {
+                      "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                    },
+                    "required": [
+                      "csv",
+                      "processedFilesDir"
+                    ],
+                    "unevaluatedProperties": false
+                  }
+                },
+                "patternProperties": {
+                  "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "dbmsSource"
+                ],
+                "properties": {
+                  "dbmsSource": {
+                    "type": "object",
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "sqlServer": {
+                            "$ref": "#/$defs/jdbcOptions",
+                            "description": "Defines SQL Server as source DBMS. The fields in sqlServer object can be any valid fields defined by spark specification for jdbc database source – see https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html. \nFor example,\n\"url\" : \"jdbc:sqlserver://my-server\\\\SQLSERVER2019:1433;database=my-db-name;integratedSecurity=true;\". \n\nIf \"numPartitions\" is defined then one of the columns in \"schema\" must have attribute \"isPartitionColumn\" set to true. The \"lowerBound\" and \"upperBound\" are optional – if absent they will be determined by the loader by querying the source table.\n"
+                          }
+                        },
+                        "patternProperties": {
+                          "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                        },
+                        "required": [
+                          "sqlServer"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "oracle": {
+                            "$ref": "#/$defs/jdbcOptions",
+                            "description": "Defines Oracle as source DBMS. The fields inside sqlServer object can be any valid field defined by spark specification for jdbc database source – see https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html \nFor example,\n\"url\" : \"jdbc:oracle:thin@//host-name:port/service-name\"\n."
+                          }
+                        },
+                        "patternProperties": {
+                          "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                        },
+                        "required": [
+                          "oracle"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mongoDb": {
+                            "type": "object",
+                            "description": "Properties for dbmsSource mongoDb can be any of the options supported by MongoDb Spark connector in batch mode. Schema must be defined",
+                            "properties": {
+                              "connection.uri": {
+                                "type": "string"
+                              },
+                              "database": {
+                                "type": "string"
+                              },
+                              "collection": {
+                                "type": "string"
+                              },
+                              "comment": {
+                                "type": "string"
+                              },
+                              "mode": {
+                                "type": "string"
+                              },
+                              "columnNameOfCorruptRecord": {
+                                "type": "string"
+                              },
+                              "mongoClientFactory": {
+                                "type": "string"
+                              },
+                              "partitioner": {
+                                "type": "string"
+                              },
+                              "sampleSize": {
+                                "type": "number"
+                              },
+                              "sql.inferSchema.mapTypes.enabled": {
+                                "type": "boolean"
+                              },
+                              "sql.inferSchema.mapTypes.minimum.key.size": {
+                                "type": "number"
+                              },
+                              "aggregation.pipeline": {
+                                "description": "When load action defines incremental load, the attribute, if used, should have a statement that loads data incrementally based on a watermark column or columns. The watermark column is a column whose previously loaded MAX value is used to determine the new rows for the incremental load.",
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                ]
+                              },
+                              "aggregation.allowDiskUse": {
+                                "type": "boolean"
+                              },
+                              "outputExtendedJson": {
+                                "type": "boolean"
+                              }
+                            },
+                            "patternProperties": {
+                              "^partitioner\\.options\\.": {
+                                "type": "string"
+                              },
+                              "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                            },
+                            "required": [
+                              "connection.uri", "collection"
+                            ],
+                            "unevaluatedProperties": false
+                          }
+                        },
+                        "patternProperties": {
+                          "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                        },
+                        "required": [
+                          "mongoDb"
+                        ]
+                      }
+                    ],
+                    "properties": {
+                      "isRemoveDuplicateRows": {
+                        "type": "boolean"
+                      },
+                      "effectiveDate": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "user": {
+                        "type": "string"
+                      },
+                      "password": {
+                        "type": "string"
+                      },
+                      "incrementalLoad": {
+                        "type": "object",
+                        "description": "Incremental load defines loading of newly added or changed data from the source. The incremetal load uses a field designated as watermark column. Watermark column can be any value that grows when the row is inserted or updated, e.g., row update timestamp or in case of SQL Server a ROWVERSION column. The loader determines MAX value for the watermark column in current data and and injects it in to the query to allow selection of data rows that were added or changed since the last load.",
+                        "properties": {
+                          "uniqueKeys": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            ],
+                            "description": "Unique keys are needed to delete records from the destination file for keys that are no longer in the source. If unique keys are not defined they will be generated programmatically."
+                          },
+                          "delimForWatermarkColumns": {
+                            "description": "Watermark columns are the columns in the destination file that are used in incremental load. The query to get data incrementally uses the MAX current value of watermark column to get new records with the value of the watermark column greater that the one in the destination file already. Delimiter designates a column in the query as a watermark column. For example, with the delimiter as three colons, the query for incremental load may look like this: SELECT OrderNumber, OrderTime From Orders WHERE OrderTime > :::OrderTime::: ",
+                            "type": "string",
+                            "pattern": "^[:@#!-]+$",
+                            "maxLength": 5
+                          }
+                        },
+                        "required": [
+                          "delimForWatermarkColumns"
+                        ],
+                        "patternProperties": {
+                          "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                        },
+                        "unevaluatedProperties": false
+                      }
+                    },
+                    "patternProperties": {
+                      "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                    },
+                    "required": [
+                    ],
+                    "dependentSchemas": {
+                      "sqlServer": {
+                        "properties": {
+                          "incrementalLoad": {
+                            "required": ["uniqueKeys"]
+                          }
+                        },
+                        "customMessage": {
+                          "required": {
+                            "uniqueKeys": "\"uniqueKeys\" attribute is missing. It is required for incremental load for sqlServer"
+                          }
+                        }
+                      },
+                      "oracle": {
+                        "properties": {
+                          "incrementalLoad": {
+                            "required": ["uniqueKeys"]
+                          }
+                        },
+                        "customMessage": {
+                          "required": {
+                            "uniqueKeys": "\"uniqueKeys\" attribute is missing. It is required for incremental load for oracle"
+                          }
+                        }
+                      }
+                    },
+                    "unevaluatedProperties": false
+                  }
+                },
+                "patternProperties": {
+                  "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                }
+              }
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "A name of the load action to differentiate multiple load actions. The name of a load action must be unique within the configuration."
+              },
+              "isActive": {
+                "type": "boolean",
+                "description": "If the value of isActive is false, the load action will not be processed."
+              },
+              "isDebugDwLib": {
+                "type": "boolean",
+                "description": "If the value is true, there will be some dataframe related output sent to the standard output from the library causing slowdown in job execution."
+              },
+              "fileLoadControl": {
+                "type": "object",
+                "description": "When this attribute is defined, the loader will create a file with summary info for each load. The info includes record counts, description of source and destination, and the action timing.",
+                "properties": {
+                  "parquet": {
+                    "type": "object",
+                    "description": "File type is parquet for load control."
+                  },
+                  "dir": {
+                    "type": "string",
+                    "description": "A directory with the load control file."
+                  }
+                },
+                "patternProperties": {
+                  "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                },
+                "required": [
+                  "parquet",
+                  "dir"
+                ],
+                "unevaluatedProperties": false
+              },
+              "fileDestination": {
+                "type": "object",
+                "properties": {
+                  "isVersioned": {
+                    "description": "When the value of isVersioned is true, the loader will maintain versioned destination file. The new version of the row is inserted based on unique key when any of the field’s values change. The unique key can be a single column or comprised of multiple columns (compound key). The granularity of the versioning is a calendar day defined by effective date. If a source has a date field that is designated as effective date then its value will be used to create versions. In the absence of such a field, the loader will use the current date.\n\n\nWhen the data source has a value of isVersioned set to false, the loaded will maintain non-versioned destination file. Non-versioned file saves every effective date data in full.",
+                    "type": "boolean"
+                  },
+                  "metadataColumnsPrefix": {
+                    "description": "Metadata columns are the columns with reserved names that serve special functions. If the name of the metadata column collides with data column, use metadata columns prefix to differentiate the names.",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                    "type": "string"
+                  },
+                  "parquet": {
+                    "description": "Defines parquet as a type of destination file",
+                    "type": "object"
+                  },
+                  "path": {
+                    "description": "Full path of the destination file.",
+                    "type": "string"
+                  },
+                  "previousCopyPath": {
+                    "description": "If defined the Source Loader will save a copy of a current file to this name. This can be useful to go back to previous version of the file if needed.",
+                    "type": "string"
+                  }
+                },
+                "patternProperties": {
+                  "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                },
+                "required": [
+                  "parquet",
+                  "path",
+                  "isVersioned"
+                ],
+                "unevaluatedProperties": false
+              },
+              "schema": {
+                "type": "array",
+                "description": "Shema defines the structure of the destination file. Schema can be absent for DBMS source. It can also be absent for file source if “inferSchema” option is set to true.\n\nIf fileDestination.isVersioned set to true the schema must have one or more columns with isUniqueKey attribute set to true.\n",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "colName": {
+                      "description": "Column name",
+                      "type": "string"
+                    },
+                    "colType": {
+                      "description": "Column data type",
+                      "type": "string"
+                    },
+                    "isUniqueKey": {
+                      "description": "Designates column as a unique key. This column attribute cannot be derived from the DBMS, so to designate a column as a unique key the column has to be included in schema.\n\nMultiple columns can be designated as unique key to create a composite unique key.\n\nUnique key is used for incremental load from dbms sources or for creating a versioned destination file.\n",
+                      "type": "boolean"
+                    },
+                    "isPartitionColumn": {
+                      "description": "For DBMS source one column can be defined as partition column to read data on multiple connections in parallel. isPartitionColumn must be defined if loadAction.dbmsSource.numberOfPartitions is defined.",
+                      "type": "boolean"
+                    },
+                    "isExcludeFromVersioning": {
+                      "description": "This field is used for versioned destination file. When this flag is set to true then even if the field changed in the source it will not trigger the creation of a new version of the row.",
+                      "type": "boolean"
+                    }
+                  },
+                  "patternProperties": {
+                    "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                  },
+                  "required": [
+                    "colName"
+                  ],
+                  "allOf": [
+                    {
+                      "if": {
+                        "properties": {
+                          "isPartitionColumn": {
+                            "const": true
+                          }
+                        },
+                        "required": ["isPartitionColumn"]
+                      },
+                      "then": {
+                        "description": "If \"isPartitionColumn\" attribute of a column is set to true, colType must be defined (it is needed to determine the type of upper and lower bounds).",
+                        "required": ["colType"],
+                        "customMessage": {
+                          "required": "\"colType\" is required when \"isPartitionColumn\" is true."
+                        }
+                      }
+                    }
+                  ],
+                  "unevaluatedProperties": false
+                }
+              },
+              "postProcess": {
+                "type": "object",
+                "properties": {
+                  "packageName": {
+                    "type": "string"
+                  },
+                  "moduleName": {
+                    "type": "string"
+                  },
+                  "methodName": {
+                    "type": "string"
+                  },
+                  "stgSources": {
+                    "type": "array",
+                    "description": "Staging sources that are used for post processing current staging source. These sources will be preloaded and made available in the post process method as views",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "moniker": {
+                          "type": "string",
+                          "description": "Staging source moniker is a unique identifier of a staging source. It is used as a view name in Spark SQL."
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "fileSource": {
+                          "type": "object",
+                          "properties": {
+                            "parquet": {
+                              "type": "object"
+                            },
+                            "path": {
+                              "type": "string",
+                              "description": "A parquet file path."
+                            }
+                          },
+                          "patternProperties": {
+                            "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                          },
+                          "required": [
+                            "parquet",
+                            "path"
+                          ],
+                          "unevaluatedProperties": false
+                        }
+                      },
+                      "patternProperties": {
+                        "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                      },
+                      "required": [
+                        "moniker",
+                        "fileSource"
+                      ],
+                      "unevaluatedProperties": false
+                    }
+                  },
+                  "applicationSpecific": {
+                    "type": "object",
+                    "unevaluatedProperties": true
+                  }
+                },
+                "patternProperties": {
+                  "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                },
+                "required": [
+                  "moduleName",
+                  "methodName"
+                ],
+                "unevaluatedProperties": false
+              }
+            },
+            "patternProperties": {
+              "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+            },
+            "required": [
+              "name",
+              "isActive",
+              "fileDestination"
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "description": "If destination file defined with \"isVersioned\"=true, then the schema must be defined with at least one column as primary key, i.e. \"isUniqueKey\": true",
+                  "properties": {
+                    "fileDestination": {
+                      "properties": {
+                        "isVersioned": { "const": true }
+                      },
+                      "required": ["isVersioned"]
+                    }
+                  },
+                  "required": ["fileDestination"]
+                },
+                "then": {
+                  "properties": {
+                    "schema": {
+                      "contains": {
+                        "properties": {
+                          "isUniqueKey": { "const": true }
+                        },
+                        "required": ["isUniqueKey"]
+                      },
+                      "customMessage": {
+                        "contains": "The schema must have at least one column as primary key when destination has \"isVersioned\" set to true, i.e. \"isUniqueKey\": true"
+                      }
+                    }
+                  },
+                  "required": ["schema"],
+                  "customMessage": {
+                    "required": "\"schema\" must be defined with at least one column as primary key when destination has \"isVersioned\" set to true"
+                  }
+                }
+              },
+              {
+                "if": {
+                  "description": "If incrementalLoad is defined then destination must be versioned, i.e., with \"isVersioned\"=true",
+                  "properties": {
+                    "dbmsSource": {
+                      "required": [
+                        "incrementalLoad"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "dbmsSource"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "fileDestination": {
+                      "properties": {
+                        "isVersioned": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "isVersioned"
+                      ],
+                      "customMessage": {
+                        "required": "\"isVersioned\" flag must be defined and set to true when \"incrementalLoad\" is defined for DBMS source",
+                        "const": "\"isVersioned\" flag must set to true when \"incrementalLoad\" is defined for DBMS source"
+                      }
+                    }
+                  },
+                  "required": [
+                    "fileDestination"
+                  ]
+                }
+              }
+            ],
+            "unevaluatedProperties": false
+          }
+        }
+      },
+      "patternProperties": {
+        "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+      },
+      "required": [
+        "sourceLoadConfigVersion",
+        "loadActions"
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "required": [
+    "sourceLoad"
+  ],
+  "unevaluatedProperties": true
+}
