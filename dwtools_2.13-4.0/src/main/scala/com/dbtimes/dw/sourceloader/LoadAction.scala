@@ -21,7 +21,7 @@ import java.text.SimpleDateFormat
 import java.text.DateFormat
 import java.util.Date
 
-import com.typesafe.config.{Config, ConfigValue}
+import com.typesafe.config.{Config, ConfigValue, ConfigValueType}
 import org.apache.commons.io.FilenameUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.hadoop.fs.{FileSystem, Path => HadoopPath}
@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.ListMap
+import scala.util.matching.Regex
 
 import com.dbtimes.dw.common._
 
@@ -40,7 +41,7 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   /**
    * Validate action against rules in addition to standard schema validation
    */
-  private[sourceloader] def validate: Seq[String]  = {
+  private[sourceloader] def validate: Seq[String] = {
     var errors: mutable.Seq[String] = mutable.Seq.empty[String]
 
     // check:
@@ -48,13 +49,13 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
     // and the type of partitioning column is not integarl type the show an error
     // ( for integral types the min and max value will be calculated in dbms helper code
 
-    val dbmsAttributes: Map[String,String] = getDbmsSpecificAttributes
-/*
-    if ( getPartitionColumn.isDefined && ( !dbmsAttributes.contains("lowerBound") || !dbmsAttributes.contains("upperBound")) && !isColumnIntegerType( getSchema( getPartitionColumn.get ).dataType ) )
-        errors = errors :+ s"""Error in "$getName" load action: partition column "${getPartitionColumn.get}" of non-integral type "${getSchema( getPartitionColumn.get ).dataType.typeName}" is defined, but the database fields does not have "lowerBound" and/or "upperBound"."""
-*/
+    val dbmsAttributes: Map[String, String] = getDbmsSpecificAttributes
+    /*
+        if ( getPartitionColumn.isDefined && ( !dbmsAttributes.contains("lowerBound") || !dbmsAttributes.contains("upperBound")) && !isColumnIntegerType( getSchema( getPartitionColumn.get ).dataType ) )
+            errors = errors :+ s"""Error in "$getName" load action: partition column "${getPartitionColumn.get}" of non-integral type "${getSchema( getPartitionColumn.get ).dataType.typeName}" is defined, but the database fields does not have "lowerBound" and/or "upperBound"."""
+    */
 
-    if ( getPartitionColumn.isDefined && !dbmsAttributes.contains("dbtable") )
+    if (getPartitionColumn.isDefined && !dbmsAttributes.contains("dbtable"))
       errors = errors :+ s"""Error in "$getName" load action: "dbtable" attribute is required for database attributes when partitioning is used to read data, i.e., when partition column is defined in the schema."""
 
     /*
@@ -75,10 +76,10 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   override private[dw] def getName: String = action.getString("action.name")
 
   override private[dw] def getIsRemoveDuplicateRows: Boolean = {
-    if (action.hasPath("action.fileSource.isRemoveDuplicateRows") ) {
+    if (action.hasPath("action.fileSource.isRemoveDuplicateRows")) {
       action.getBoolean("action.fileSource.isRemoveDuplicateRows")
     }
-    else if ( action.hasPath("action.dbmsSource.isRemoveDuplicateRows") ) {
+    else if (action.hasPath("action.dbmsSource.isRemoveDuplicateRows")) {
       action.getBoolean("action.dbmsSource.isRemoveDuplicateRows")
     }
     else {
@@ -86,15 +87,16 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
     }
   }
 
-  /***
+  /** *
    * Incremental Load is opposite of Full load. Do not mix Full and Initial loads. Full or Incremental load can be used for subsequent loads
+   *
    * @return
    */
   private[sourceloader] def isIncrementalLoad: Boolean = {
     if (!getIsInitialLoad
       && getIsVersioned // for non-versioned data we need to read the full set anyway. For now, we do not support incremental load on non-versioned data.
       && !getMergeKeysList.isEmpty // need merge key to include only non-deleted rows in the new set
-      && getIsIncrementalLoadDefined ) true else false
+      && getIsIncrementalLoadDefined) true else false
   }
 
   /**
@@ -129,9 +131,9 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
     else if (getIsFileSourceInternetLocation)
       getSourceFileUrl
     else if (getIsDbmsSource) {
-      if ( getSourceTable.isDefined )
+      if (getSourceTable.isDefined)
         getSourceTable.get
-      else if ( getMongoDbCollectionAsOption.isDefined )
+      else if (getMongoDbCollectionAsOption.isDefined)
         getMongoDbCollectionAsOption.get
       else
         "Unknown dbms source table"
@@ -142,41 +144,49 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
 
   // Methods applicable to file source
   private[sourceloader] def getIsFileSourceFileSystemLocation: Boolean = if (getIsFileSource && action.hasPath("action.fileSource.fileSystemLocation")) true else false
+
   private[sourceloader] def getIsFileSourceInternetLocation: Boolean = if (getIsFileSource && action.hasPath("action.fileSource.internetLocation")) true else false
+
   private[sourceloader] def getIsFileSourceCustomLocation: Boolean = if (getIsFileSource && action.hasPath("action.fileSource.customLocation")) true else false
 
   // Methods applicable to fileSystem location
   private[sourceloader] def getSourceFileDir: String = if (getIsFileSourceFileSystemLocation) action.getString("action.fileSource.fileSystemLocation.dir") else throw new RuntimeException("""Loader Configuration ERROR: "fileSource.fileSystemLocation.dir" is only valid for "fileSource.fileSystemLocation" """)
+
   private[sourceloader] def getSourceFileNamePattern: String = if (getIsFileSourceFileSystemLocation) action.getString("action.fileSource.fileSystemLocation.namePattern") else throw new RuntimeException("""Loader Configuration ERROR: "fileSource.fileSystemLocation.namePattern" is only valid for "fileSource.fileSystemLocation" """)
+
   // Methods applicable to internet location
   private[sourceloader] def getSourceFileUrl: String = if (getIsFileSourceInternetLocation) action.getString("action.fileSource.internetLocation.url") else throw new RuntimeException("""Loader Configuration ERROR: "fileSource.internetLocation.url" is only valid for "fileSource.internetLocation" """)
+
   private[sourceloader] def getSourceFileUser: Option[String] = {
     if (getIsFileSourceInternetLocation)
       if (action.hasPath("action.fileSource.internetLocation.user"))
-        Some( action.getString("action.fileSource.internetLocation.user") )
+        Some(action.getString("action.fileSource.internetLocation.user"))
       else
         None
     else
       throw new RuntimeException("""Loader Configuration ERROR: "fileSource.internetLocation.user" is only valid for "fileSource.internetLocation" """)
   }
+
   private[sourceloader] def getSourceFilePassword: Option[String] = {
     if (getIsFileSourceInternetLocation)
       if (action.hasPath("action.fileSource.internetLocation.password"))
-        Some( action.getString("action.fileSource.internetLocation.password") )
+        Some(action.getString("action.fileSource.internetLocation.password"))
       else
         None
     else
       throw new RuntimeException("""Loader Configuration ERROR: "fileSource.internetLocation.password" is only valid for "fileSource.internetLocation" """)
   }
+
   private[sourceloader] def getIsDisableSslVerification: Option[Boolean] = {
     if (getIsFileSourceInternetLocation)
       if (action.hasPath("action.fileSource.internetLocation.isDisableSslVerification"))
-        Some( action.getBoolean("action.fileSource.internetLocation.isDisableSslVerification") )
+        Some(action.getBoolean("action.fileSource.internetLocation.isDisableSslVerification"))
       else
         None
     else
       throw new RuntimeException("""Loader Configuration ERROR: "isDisableSslVerification" is only valid for "fileSource.internetLocation" """)
   }
+
   // Methods applicable to custom location
   private[sourceloader] def getSourceFilePackageName: String = {
     if (getIsFileSourceCustomLocation)
@@ -187,12 +197,15 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
     else
       throw new RuntimeException("""Loader Configuration ERROR: "fileSource.customLocation.packageName" is only valid for "fileSource.customLocation" """)
   }
+
   private[sourceloader] def getSourceFileModuleName: String = if (getIsFileSourceCustomLocation) action.getString("action.fileSource.customLocation.moduleName") else throw new RuntimeException("""Loader Configuration ERROR: "fileSource.customLocation.moduleName" is only valid for "fileSource.customLocation" """)
+
   private[sourceloader] def getSourceFileMethodName: String = if (getIsFileSourceCustomLocation) action.getString("action.fileSource.customLocation.methodName") else throw new RuntimeException("""Loader Configuration ERROR: "fileSource.customLocation.methodName" is only valid for "fileSource.customLocation" """)
+
   private[sourceloader] def getIsSourceFileMethodReturnsFilePath: Boolean = {
     if (getIsFileSourceCustomLocation) {
       val methodReturns = action.getString("action.fileSource.customLocation.methodReturns")
-      if ( methodReturns == "FilePath" )
+      if (methodReturns == "FilePath")
         true
       else
         false
@@ -200,10 +213,11 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
     else
       throw new RuntimeException("""Loader Configuration ERROR: "fileSource.customLocation.methodReturns" is only valid for "fileSource.customLocation" """)
   }
+
   private[sourceloader] def getIsSourceFileMethodReturnsFileData: Boolean = {
     if (getIsFileSourceCustomLocation) {
       val methodReturns = action.getString("action.fileSource.customLocation.methodReturns")
-      if ( methodReturns == "FileData" )
+      if (methodReturns == "FileData")
         true
       else
         false
@@ -211,10 +225,11 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
     else
       throw new RuntimeException("""Loader Configuration ERROR: "fileSource.customLocation.methodReturns" is only valid for "fileSource.customLocation" """)
   }
+
   private[sourceloader] def getSourceFileApplicationSpecific: Option[Config] = {
     if (getIsFileSourceCustomLocation)
       if (action.hasPath("action.fileSource.customLocation.applicationSpecific"))
-        Some( action.getConfig("action.fileSource.customLocation.applicationSpecific") )
+        Some(action.getConfig("action.fileSource.customLocation.applicationSpecific"))
       else
         None
     else
@@ -237,26 +252,26 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   //
   // Methods applicable to file source - csv
   // -----------------------------------------
-  private[sourceloader] def getCsvOptions: Map[String,String] = {
-    super.getConfigObjectFieldsAndValues( if (getIsFileSourceCsv) Some( action.getConfig("action.fileSource.csv") ) else None )
+  private[sourceloader] def getCsvOptions: Map[String, String] = {
+    super.getConfigObjectFieldsAndValues(if (getIsFileSourceCsv) Some(action.getConfig("action.fileSource.csv")) else None)
   }
 
   //
   // Methods applicable to dbms source
   // -----------------------------------
   private[sourceloader] def getConnectionUri: Option[String] = {
-    if (getIsDbmsSource ) {
-      val dbmsAttributes: Map[String,String] = getDbmsSpecificAttributes
+    if (getIsDbmsSource) {
+      val dbmsAttributes: Map[String, String] = getDbmsSpecificAttributes
 
-      if ( ( getIsSqlServerSource || getIsOracleSource) && dbmsAttributes.contains("url") ) {
+      if ((getIsSqlServerSource || getIsOracleSource) && dbmsAttributes.contains("url")) {
         dbmsAttributes.get("url")
-        }
-        else if ( getIsMongoDbSource && dbmsAttributes.contains("connection.uri") ) {
-          dbmsAttributes.get("connection.uri")
-        }
-        else {
-          None
-        }
+      }
+      else if (getIsMongoDbSource && dbmsAttributes.contains("connection.uri")) {
+        dbmsAttributes.get("connection.uri")
+      }
+      else {
+        None
+      }
     }
     else
       None
@@ -277,13 +292,13 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   }
 
   private[sourceloader] def getSourceTable: Option[String] = {
-    if (getIsDbmsSource ) {
-      val dbmsAttributes: Map[String,String] = getDbmsSpecificAttributes
+    if (getIsDbmsSource) {
+      val dbmsAttributes: Map[String, String] = getDbmsSpecificAttributes
 
-      if ( ( getIsSqlServerSource || getIsOracleSource) && dbmsAttributes.contains("dbtable") ) {
+      if ((getIsSqlServerSource || getIsOracleSource) && dbmsAttributes.contains("dbtable")) {
         getDbmsSpecificAttributes.get("dbtable")
       }
-      else if ( getIsMongoDbSource && dbmsAttributes.contains("aggregation.pipeline") ) {
+      else if (getIsMongoDbSource && dbmsAttributes.contains("aggregation.pipeline")) {
         getDbmsSpecificAttributes.get("aggregation.pipeline")
       }
       else {
@@ -295,7 +310,7 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   }
 
   private[sourceloader] def getPartitionColumn: Option[String] = {
-    if ( !action.hasPath("action.schema") )
+    if (!action.hasPath("action.schema"))
       None
     else {
       val partitionColumns = super.getSchemaColNamesWithFlag(
@@ -305,10 +320,10 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   }
 
   private[sourceloader] def getNumberOfPartitions: Int = {
-    if (getIsDbmsSource ) {
-      val dbmsAttributes: Map[String,String] = getDbmsSpecificAttributes
+    if (getIsDbmsSource) {
+      val dbmsAttributes: Map[String, String] = getDbmsSpecificAttributes
 
-      if ( ( getIsSqlServerSource || getIsOracleSource) && dbmsAttributes.contains("numPartitions") ) {
+      if ((getIsSqlServerSource || getIsOracleSource) && dbmsAttributes.contains("numPartitions")) {
         dbmsAttributes("numPartitions").toInt
       }
       else {
@@ -320,7 +335,9 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   }
 
   private[sourceloader] def getIsSqlServerSource: Boolean = if (getIsDbmsSource && action.hasPath("action.dbmsSource.sqlServer")) true else false
+
   private[sourceloader] def getIsOracleSource: Boolean = if (getIsDbmsSource && action.hasPath("action.dbmsSource.oracle")) true else false
+
   private[sourceloader] def getIsMongoDbSource: Boolean = if (getIsDbmsSource && action.hasPath("action.dbmsSource.mongoDb")) true else false
 
   private[sourceloader] def getMongoDbCollectionAsOption: Option[String] = {
@@ -335,15 +352,16 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
     else
       None
   }
-  private[sourceloader] def getDbmsSpecificAttributes: Map[String,String] = {
-    if ( getIsSqlServerSource )
-      super.getConfigObjectFieldsAndValues( Some( action.getConfig("action.dbmsSource.sqlServer") ) )
-    else if ( getIsOracleSource )
-      super.getConfigObjectFieldsAndValues( Some( action.getConfig("action.dbmsSource.oracle") ) )
-    else if ( getIsMongoDbSource )
-      super.getConfigObjectFieldsAndValues( Some( action.getConfig("action.dbmsSource.mongoDb") ) )
+
+  private[sourceloader] def getDbmsSpecificAttributes: Map[String, String] = {
+    if (getIsSqlServerSource)
+      super.getConfigObjectFieldsAndValues(Some(action.getConfig("action.dbmsSource.sqlServer")))
+    else if (getIsOracleSource)
+      super.getConfigObjectFieldsAndValues(Some(action.getConfig("action.dbmsSource.oracle")))
+    else if (getIsMongoDbSource)
+      super.getConfigObjectFieldsAndValues(Some(action.getConfig("action.dbmsSource.mongoDb")))
     else
-      Map[String,String] ()
+      Map[String, String]()
   }
 
 
@@ -363,7 +381,9 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   }
 
   override private[dw] def getDestinationTypeDescription: String = if (getIsFileDestinationParquet) "parquet file" else "Unknown" // Add DBMS details when implemented
+
   override private[dw] def getDestinationDescription: String = if (getIsFileDestinationParquet) getDestinationFilePath else "Unknown" // Add DBMS details when implemented
+
   override private[dw] def getIsFileDestination: Boolean = if (action.hasPath("action.fileDestination")) true else false
 
   override private[dw] def getIsDbmsDestination: Boolean = if (action.hasPath("action.dbmsDestination")) true else false
@@ -471,16 +491,16 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   private[sourceloader] def getIsIncrementalLoadDefined: Boolean = if (action.hasPath("action.dbmsSource.incrementalLoad")) true else false
 
   private[sourceloader] def getIncrementalLoadSourceTableChangesSql: String = {
-    val dbmsAttributes: Map[String,String] = getDbmsSpecificAttributes
+    val dbmsAttributes: Map[String, String] = getDbmsSpecificAttributes
 
     val sourceTableChangesSql = {
-      if ( !getIsIncrementalLoadDefined ) {
+      if (!getIsIncrementalLoadDefined) {
         ""
       }
-      else if ( ( getIsSqlServerSource || getIsOracleSource) && dbmsAttributes.contains("dbtable") ) {
+      else if ((getIsSqlServerSource || getIsOracleSource) && dbmsAttributes.contains("dbtable")) {
         getDbmsSpecificAttributes("dbtable")
       }
-      else if ( getIsMongoDbSource && dbmsAttributes.contains("aggregation.pipeline") ) {
+      else if (getIsMongoDbSource && dbmsAttributes.contains("aggregation.pipeline")) {
         getDbmsSpecificAttributes("aggregation.pipeline")
       }
       else {
@@ -491,13 +511,13 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
     sourceTableChangesSql
   }
 
-  private[sourceloader] def getIncrementalLoadUniqueKeysSql: Option[ String ] = {
+  private[sourceloader] def getIncrementalLoadUniqueKeysSql: Option[String] = {
     val uniqueKeysSql = {
-      if ( !getIsIncrementalLoadDefined ) {
+      if (!getIsIncrementalLoadDefined) {
         None
       }
-      else if ( action.hasPath("action.dbmsSource.incrementalLoad.uniqueKeys") ) {
-        Some( action.getString("action.dbmsSource.incrementalLoad.uniqueKeys") )
+      else if (action.hasPath("action.dbmsSource.incrementalLoad.uniqueKeys")) {
+        Some(action.getString("action.dbmsSource.incrementalLoad.uniqueKeys"))
       }
       else {
         None
@@ -510,17 +530,17 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
 
     val sourceTableChangesSql = getIncrementalLoadSourceTableChangesSql
 
-    if ( getIsIncrementalLoadDefined && !sourceTableChangesSql.isEmpty) {
+    if (getIsIncrementalLoadDefined && !sourceTableChangesSql.isEmpty) {
       // the pattern will look something like this
       // "(?<delimStart>:::)(?<column>.+)(?<delimEnd>:::)"
       // where ::: is the delimiter for max value fields
       //  and column between delimiters is the column in the destination file
       val watermarkColumnsPattern =
-        ( "(?<delimStart>" +
+        ("(?<delimStart>" +
           action.getString("action.dbmsSource.incrementalLoad.delimForWatermarkColumns") +
           ")(?<column>.+)(?<delimEnd>" +
           action.getString("action.dbmsSource.incrementalLoad.delimForWatermarkColumns") +
-          ")" ).r
+          ")").r
 
       val allPlaceholderMatches = watermarkColumnsPattern.findAllMatchIn(sourceTableChangesSql).toSeq
       val columns = (for (placeholder <- allPlaceholderMatches) yield placeholder.group(2)).toList // result has a list of columns, e.g., List[String] = List(RowVersion, RowVersion2). Also, placeholder.group( "column" )does not work for older version of scala. Using ordinal value
@@ -535,7 +555,7 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
 
   // Post process methods
   private[sourceloader] def getIsPostProcessDefined: Boolean = if (action.hasPath("action.postProcess")) true else false
-  
+
   private[sourceloader] def getPostProcessPackageName: String = {
     if (getIsPostProcessDefined)
       if (action.hasPath("action.postProcess.packageName"))
@@ -545,12 +565,15 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
     else
       throw new RuntimeException("""Loader Configuration ERROR: "postProcess.packageName" is only valid for "postProcess" """)
   }
+
   private[sourceloader] def getPostProcessModuleName: String = if (getIsPostProcessDefined) action.getString("action.postProcess.moduleName") else throw new RuntimeException("""Loader Configuration ERROR: "postProcess.moduleName" is only valid for "postProcess" """)
+
   private[sourceloader] def getPostProcessMethodName: String = if (getIsPostProcessDefined) action.getString("action.postProcess.methodName") else throw new RuntimeException("""Loader Configuration ERROR: "postProcess.methodName" is only valid for "postProcess" """)
+
   private[sourceloader] def getPostProcessApplicationSpecific: Option[Config] = {
     if (getIsPostProcessDefined)
       if (action.hasPath("action.postProcess.applicationSpecific"))
-        Some( action.getConfig("action.postProcess.applicationSpecific") )
+        Some(action.getConfig("action.postProcess.applicationSpecific"))
       else
         None
     else
@@ -558,7 +581,7 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   }
 
   private[sourceloader] def getPostProcessStgSourceMonikers: List[String] = {
-    if (action.hasPath("action.postProcess.stgSources") ) {
+    if (action.hasPath("action.postProcess.stgSources")) {
       val stgSources = action.getConfigList("action.postProcess.stgSources").asScala.toList
       stgSources map {
         case source: Config => source.getString("moniker")
@@ -568,12 +591,12 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
       List.empty[String]
     }
   }
-/*
-  private[sourceloader] def getStgSourceMonikers( stgSources: List[Config] ): List[String] = {
-    stgSources map {
-      case source: Config => source.getString("moniker")
-    }
-  }*/
+  /*
+    private[sourceloader] def getStgSourceMonikers( stgSources: List[Config] ): List[String] = {
+      stgSources map {
+        case source: Config => source.getString("moniker")
+      }
+    }*/
 
   private def getPostProcessSourceConfiguration(sourceMoniker: String): Config = {
     val stgSources = action.getConfigList("action.postProcess.stgSources").asScala.toList
@@ -606,16 +629,166 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
   }
 
   override private[dw] def getMergeKeysList: List[String] = {
-/*
-    val mergeKeysList = super.getSchemaColNamesWithFlag(action, "action.schema", "isMergeKey", true, Some(false))
-    if (!mergeKeysList.isEmpty && mergeKeysList != getPrimaryKeysList) {
-      throw new RuntimeException("""Loader Configuration ERROR: current version of the loader does not support merge keys different from unique keys """)
-    }
-*/
+    /*
+        val mergeKeysList = super.getSchemaColNamesWithFlag(action, "action.schema", "isMergeKey", true, Some(false))
+        if (!mergeKeysList.isEmpty && mergeKeysList != getPrimaryKeysList) {
+          throw new RuntimeException("""Loader Configuration ERROR: current version of the loader does not support merge keys different from unique keys """)
+        }
+    */
     // For now just return the same keys as Primary keys. In case Merge keys are not set initially and
     // then incremental load is run. Otherwise, in this scenario the incremental load will not work since
     // merge keys column will be null from initial load.
     getPrimaryKeysList
+  }
+
+  // Schema evolution methods
+  override private[dw] def getIsDefinedSchemaEvolution: Boolean = action.hasPath("action.schemaEvolution")
+
+  override private[dw] def getIsAllowMetadataColumnsPrefixChange: Boolean = {
+    if (getIsDefinedSchemaEvolution && action.hasPath("action.schemaEvolution.allowMetadataColumnsPrefixChange"))
+      action.getBoolean("action.schemaEvolution.allowMetadataColumnsPrefixChange")
+    else
+      false
+  }
+
+  //  override private[dw] def getIsAllowColumnRename: Boolean = false
+  override private[dw] def getIsAllowColumnAdd: Boolean = {
+    if (getIsDefinedSchemaEvolution
+      && action.hasPath("action.schemaEvolution.columnAdd")
+      && action.hasPath("action.schemaEvolution.columnAdd.isAllow")) {
+      action.getBoolean("action.schemaEvolution.columnAdd.isAllow")
+    }
+    else
+      false
+  }
+
+  override private[dw] def getIsAllowColumnDelete: Boolean = {
+    if (getIsDefinedSchemaEvolution
+      && action.hasPath("action.schemaEvolution.columnDelete")
+      && action.hasPath("action.schemaEvolution.columnDelete.isAllow")) {
+      action.getBoolean("action.schemaEvolution.columnDelete.isAllow")
+    }
+    else
+      false
+  }
+
+  override private[dw] def getIsAllowColumnTypeChange: Boolean = {
+    if (getIsDefinedSchemaEvolution
+      && action.hasPath("action.schemaEvolution.columnTypeChange")
+      && action.hasPath("action.schemaEvolution.columnTypeChange.isAllow")) {
+      action.getBoolean("action.schemaEvolution.columnTypeChange.isAllow")
+    }
+    else
+      false
+  }
+
+  //  override private[dw] def getColumnsToRename:  Map[String,String] = Map.empty[String, String] // ( fromColumnName, toColumnName )
+  override private[dw] def getColumnsToAdd: Map[Regex, (Option[String], Option[Double], Option[Long], Option[Boolean])] = {
+    if (getIsDefinedSchemaEvolution
+      && action.hasPath("action.schemaEvolution.columnAdd")
+      && action.hasPath("action.schemaEvolution.columnAdd.columnsToAdd")) {
+
+      val columnsToAddList: Seq[Config] = action.getConfigList("action.schemaEvolution.columnAdd.columnsToAdd").asScala.toSeq
+
+      columnsToAddList.map { itemConfig =>
+        val colPattern = itemConfig.getString("colNamePattern").r
+
+        val backfillValue: (Option[String], Option[Double], Option[Long], Option[Boolean])  = if (itemConfig.hasPath("backfillValue")) {
+          val valOfSeveralTypes = itemConfig.getValue("backfillValue")
+
+          type DynamicValue = Either[String, Either[Double, Boolean]]
+
+          val extracted: DynamicValue =
+            itemConfig.getValue("backfillValue").valueType() match {
+              case ConfigValueType.STRING => Left(itemConfig.getString("backfillValue"))
+              case ConfigValueType.NUMBER => Right(Left(itemConfig.getInt("backfillValue")))
+              case ConfigValueType.BOOLEAN => Right(Right(itemConfig.getBoolean("backfillValue")))
+              case _ => throw new IllegalArgumentException("Unsupported type")
+            }
+
+
+          val value: (Option[String], Option[Double], Option[Long], Option[Boolean]) = extracted match {
+            case Left(str) =>
+              (Some(str), None, None, None)
+
+            case Right(Left(num)) =>
+              (None, Some(num), Some(num.toLong), None)
+
+            case Right(Right(bool)) =>
+              (None, None, None, Some(bool) )
+          }
+
+          value
+        }
+        else {
+          (None, None, None, None)
+        }
+        colPattern -> backfillValue
+      }.toMap
+    }
+    else
+      Map.empty[Regex, (Option[String], Option[Double], Option[Long], Option[Boolean])]
+  }
+
+
+  override private[dw] def getBackfillValueForStrings: Option[String] = {
+    if (getIsDefinedSchemaEvolution
+      && action.hasPath("action.schemaEvolution.columnAdd")
+      && action.hasPath("action.schemaEvolution.columnAdd.backfillValueForStrings")) {
+      Some(action.getString("action.schemaEvolution.columnAdd.backfillValueForStrings"))
+    }
+    else
+      None
+  }
+
+  override private[dw] def getBackfillValueForFloats: Option[Double] = {
+    if (getIsDefinedSchemaEvolution
+      && action.hasPath("action.schemaEvolution.columnAdd")
+      && action.hasPath("action.schemaEvolution.columnAdd.backfillValueForFloats")) {
+      Some(action.getDouble("action.schemaEvolution.columnAdd.backfillValueForFloats"))
+    }
+    else
+      None
+  }
+
+  override private[dw] def getBackfillValueForIntegers: Option[Long] = {
+    if (getIsDefinedSchemaEvolution
+      && action.hasPath("action.schemaEvolution.columnAdd")
+      && action.hasPath("action.schemaEvolution.columnAdd.backfillValueForIntegers")) {
+      Some(action.getLong("action.schemaEvolution.columnAdd.backfillValueForIntegers"))
+    }
+    else
+      None
+  }
+
+  override private[dw] def getBackfillValueForBooleans: Option[Boolean] = {
+    if (getIsDefinedSchemaEvolution
+      && action.hasPath("action.schemaEvolution.columnAdd")
+      && action.hasPath("action.schemaEvolution.columnAdd.backfillValueForBooleans")) {
+      Some(action.getBoolean("action.schemaEvolution.columnAdd.backfillValueForBooleans"))
+    }
+    else
+      None
+  }
+
+  override private[dw] def getColumnsToDelete: Seq[Regex] = {
+    if (getIsDefinedSchemaEvolution
+      && action.hasPath("action.schemaEvolution.columnDelete")
+      && action.hasPath("action.schemaEvolution.columnDelete.columnsToDelete")) {
+      action.getStringList("action.schemaEvolution.columnDelete.columnsToDelete").asScala.toSeq.map(_.r)
+    }
+    else
+      Seq.empty[Regex]
+  }
+
+  override private[dw] def getColumnsToChangeType: Seq[Regex] = {
+    if (getIsDefinedSchemaEvolution
+      && action.hasPath("action.schemaEvolution.columnTypeChange")
+      && action.hasPath("action.schemaEvolution.columnTypeChange.columnsToChangeType")) {
+      action.getStringList("action.schemaEvolution.columnTypeChange.columnsToChangeType").asScala.toSeq.map(_.r)
+    }
+    else
+      Seq.empty[Regex]
   }
 
 }

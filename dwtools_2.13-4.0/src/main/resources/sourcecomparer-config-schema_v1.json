@@ -430,7 +430,7 @@
         "sourceCompareConfigVersion": {
           "type": "string",
           "description": "Version of a Source Comparer json configuration",
-          "enum": ["1"]
+          "const": "1"
         },
         "compareScenarios": {
           "type": "array",

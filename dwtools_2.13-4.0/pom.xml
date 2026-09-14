@@ -6,7 +6,7 @@
 
     <groupId>com.dbtimes</groupId>
     <artifactId>dwtools_2.13-4.0</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
 
 	<name>Data Warehouse Tools For Spark</name>
 	<description>dwtools used to implement Data Warehouse that follows Kimball Dimensional modeling approach on Spark</description>

@@ -479,7 +479,7 @@ abstract class Fact(private val factName: String)
       // However the new data dfFactWitMetadataCols has all columns in correct order
       val schemaWithMetadataCols = dfFactWithMetadataCols.schema
       val dfOldFactWithNormalizedSchema = dfOldFact.setNewSchema(schemaWithMetadataCols)
-      val dfFactMerged = mergeSourceDataChanges(this, dfFactWithMetadataCols, true, dfAllMergeKeysAsOption.get, dfOldFactWithNormalizedSchema, new SimpleDateFormat("yyyy-MM-dd").parse("1900-01-01"))
+      val dfFactMerged = mergeSourceDataChanges(this, dfFactWithMetadataCols, isNewDataPreparedForMerge = true, dfAllMergeKeysAsOption.get, dfOldFactWithNormalizedSchema, new SimpleDateFormat("yyyy-MM-dd").parse("1900-01-01"))
       FileHelper.saveDataFrameAsParquet(dfFactMerged, factFilePath, columnsPartitionBy = configDwEtl.getPartitionByCols(factName))
     }
   }
@@ -533,7 +533,7 @@ abstract class Fact(private val factName: String)
         // However, the new data dfFactWitMetadataCols has all columns in correct order
         val schemaWithMetadataCols = dfFactWithMetadataCols.schema
         val dfOldFactWithNormalizedSchema = dfOldFactForChangedPartitions.setNewSchema(schemaWithMetadataCols)
-        val dfFactMerged = mergeSourceDataChanges(this, dfFactWithMetadataCols, true, dfAllMergeKeysAsOption.get, dfOldFactWithNormalizedSchema, new SimpleDateFormat("yyyy-MM-dd").parse("1900-01-01"))
+        val dfFactMerged = mergeSourceDataChanges(this, dfFactWithMetadataCols, isNewDataPreparedForMerge = true, dfAllMergeKeysAsOption.get, dfOldFactWithNormalizedSchema, new SimpleDateFormat("yyyy-MM-dd").parse("1900-01-01"))
 
         FileHelper.saveDataFrameAsParquetReplacePartitions(dfFactMerged, factFilePath, columnsPartitionBy = configDwEtl.getPartitionByCols(factName))
       }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Data Warehouse ETL Configuration v1",
+  "title": "Data Warehouse ETL Configuration v2",
   "description": "Defines fields for the Data Warehouse application that uses dw Etl library. The configuration JSON file can have other fields at the top level in addition to dwEtl object.",
   "type": "object",
   "properties": {
@@ -11,7 +11,7 @@
         "dwEtlConfigVersion": {
           "type": "string",
           "description": "version of DW ETL configuration",
-          "const": "1"
+          "const": "2"
         },
         "isDebugDwLib": {
           "type": "boolean",
@@ -72,7 +72,11 @@
               },
               "applicationSpecific": {
                 "type": "object",
-                "unevaluatedProperties": true
+                "unevaluatedProperties": true,
+                "not": true,
+                "customMessage": {
+                  "not": "[WARN] \"applicationSpecific\" attribute is deprecated and will be removed from future schema versions. For staging source specific attributes use configuration outside of \"dwEtl\" object or define needed values in application code"
+                }
               },
               "effectiveDateColumn": {
                 "type": "string",
@@ -222,7 +226,7 @@
                         "type": "object",
                         "properties": {
                           "colName": {
-			    "description": "Column name",
+                            "description": "Column name",
                             "type": "string"
                           }
                         },
@@ -247,35 +251,35 @@
                 }
               },
               "schema": {
-				"description": "Specifications for dimension columns",
+                "description": "Specifications for dimension columns",
                 "type": "array",
                 "minItems": 1,
                 "items": {
                   "type": "object",
                   "properties": {
                     "colName": {
-					  "description": "A name of the dimension column.",
+                      "description": "A name of the dimension column.",
                       "type": "string"
                     },
                     "colType": {
-					  "description": "Data type of dimension column. colType must be Short, Integer or Long if the column is a dimension key (i.e., \"isKey\": true)",
+                      "description": "Data type of dimension column. colType must be Short, Integer or Long if the column is a dimension key (i.e., \"isKey\": true)",
                       "type": "string",
                       "enum": [ "Short", "Integer", "Long", "Date", "Timestamp", "String", "Double" ]
                     },
                     "isKey": {
-					  "description": "If true, this column is a dimension key.",
+                      "description": "If true, this column is a dimension key.",
                       "type": "boolean"
                     },
                     "isSurrogateKey": {
-					  "description": "isSurrogateKey can only be defined for dimension key column, i.e., when \"isKey\": true. If true, this column is a surrogate key and its value will be generated using increasing – but not necessarily sequential - distinct values. The data type for a surrogate key must be “Long”.\nIf isSurrogateKey is false or not defined, the value for the key column must be provided  together with the rest of the dimension values.",
+                      "description": "isSurrogateKey can only be defined for dimension key column, i.e., when \"isKey\": true. If true, this column is a surrogate key and its value will be generated using increasing – but not necessarily sequential - distinct values. The data type for a surrogate key must be “Long”.\nIf isSurrogateKey is false or not defined, the value for the key column must be provided  together with the rest of the dimension values.",
                       "type": "boolean"
                     },
                     "unknownValue": {
-					  "description": "Unknown value must be the valid value for column data type. Use yyyy-mm-dd format for Date type. If unknown value is not specified it will be set to NULL to any column but the dimension key – the default unknown value for dimension key is 0 (zero).",
+                      "description": "Unknown value must be the valid value for column data type. Use yyyy-mm-dd format for Date type. If unknown value is not specified it will be set to NULL to any column but the dimension key – the default unknown value for dimension key is 0 (zero).",
                       "type": ["string", "null"]
                     },
                     "isNaturalKey": {
-					  "description": "A flag to indicate that a column is a natural key for the dimension. Multiple columns can be defined as natural key to create a compound natural key.",
+                      "description": "A flag to indicate that a column is a natural key for the dimension. Multiple columns can be defined as natural key to create a compound natural key.",
                       "type": "boolean"
                     },
                     "scdType": {
@@ -335,7 +339,7 @@
                     },
                     {
                       "if": {
-						"properties": {
+                        "properties": {
                           "isKey": {
                             "const": true
                           }
@@ -391,7 +395,7 @@
                         "required": ["colType"]
                       }
                     }
-                    ],
+                  ],
                   "unevaluatedProperties": false
                 },
                 "allOf" : [
@@ -430,7 +434,7 @@
                       "contains": "Dimension's schema must have one dimension key defined. One and only one column must/can have \"isKey\" flag set to true"
                     }
                   }
-                  ],
+                ],
                 "customMessage": {
                   "minItems": "Dimension's schema does not have any columns defined. It must have at least one column"
                 }
@@ -453,7 +457,7 @@
           "description": "A section of specifications for attributes common to all fact tables.",
           "properties": {
             "packageName": {
-			  "description": "All fact classes described in a configuration must be defined in the same package. Package name is used to dynamically create an instance of a fact class.",
+              "description": "All fact classes described in a configuration must be defined in the same package. Package name is used to dynamically create an instance of a fact class.",
               "type": "string"
             },
             "factNamePattern": {
@@ -477,7 +481,7 @@
                   }
                 },
                 "pathWithKeySetters": {
-				  "description": "If defined, DW ETL will create fact table with natural keys used to set fact table keys in addition to regulat fact table. This file is used mostly in development to insure the correct setting on dimension keys on a fact table and troubleshoot the unknown keys. The help in troubleshooting the unknown keys can make this file useful in production. Creating of this file has relatively low performance cost.",
+                  "description": "If defined, DW ETL will create fact table with natural keys used to set fact table keys in addition to regulat fact table. This file is used mostly in development to insure the correct setting on dimension keys on a fact table and troubleshoot the unknown keys. The help in troubleshooting the unknown keys can make this file useful in production. Creating of this file has relatively low performance cost.",
                   "type": "string",
                   "pattern":  "^.*___.*$",
                   "customMessage": {
@@ -548,7 +552,7 @@
                       "description": "Name of the dimension."
                     },
                     "schema": {
-					  "description": "Specifications for dimension columns used in loading fact table",
+                      "description": "Specifications for dimension columns used in loading fact table",
                       "type": "array",
                       "items": {
                         "type": "object",

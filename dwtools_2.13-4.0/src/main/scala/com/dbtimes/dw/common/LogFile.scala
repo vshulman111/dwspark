@@ -20,7 +20,12 @@ package com.dbtimes.dw.common
 // import org.slf4j.LoggerFactory
 // import org.slf4j.Logger
 import com.typesafe.scalalogging.LazyLogging
+import org.slf4j.LoggerFactory
 
 private[dw] object LogFile extends LazyLogging {
   val dwlogger = logger
+
+  override lazy val logger = com.typesafe.scalalogging.Logger(
+    LoggerFactory.getLogger("DWTools")
+  )
 }

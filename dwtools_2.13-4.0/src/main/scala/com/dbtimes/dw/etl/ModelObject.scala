@@ -62,7 +62,10 @@ object ModelObject {
     //    - unique names of actions
 
     // Do Steps 1 and 2
-    errors ++= MiscHelper.validateConfigVersionAndConfigAgainstThatVersion(appConfig, schemaBaseFileName, pathToVersionField)
+    val errorsAndwarnings = MiscHelper.validateConfigVersionAndConfigAgainstThatVersion(appConfig, schemaBaseFileName, pathToVersionField)
+
+    errors ++= errorsAndwarnings._1
+    val warnings = errorsAndwarnings._2
 
     // Step 3. Validate schema in the code for components not supported by generic  schema validation
     //          Step 3 depends on schema being validated in steps 1 and 2 because it assumes that specific paths and fields exist
@@ -71,9 +74,22 @@ object ModelObject {
       errors ++= confDwEtl.validateModelConfiguration()
     }
 
+    val errorMessage = if (errors.nonEmpty) {
+      errors.mkString( "DW ETL Configuration ERROR(s)\n *", "\n *", "" )
+    }
+    else
+      ""
+    val warningMessage = if (warnings.nonEmpty) {
+      warnings.mkString( s"""${if (errorMessage.nonEmpty) "\n" else ""}DW ETL Configuration WARNINGS(s)\n *""", "\n *", "" )
+    }
+    else
+      ""
+
     if (errors.nonEmpty) {
-      val errorMessage = errors.mkString( "DW ETL Configuration ERROR(s)\n *", "\n *", "" )
-      throw new RuntimeException(errorMessage)
+      throw new RuntimeException(errorMessage + warningMessage)
+    }
+    else if(warnings.nonEmpty) {
+      dwEtlLog.warn(warningMessage)
     }
   }
 

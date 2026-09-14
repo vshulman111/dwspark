@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Source Loader Configuration v1",
+  "title": "Source Loader Configuration v2",
   "description": "Defines required field for source loader application that uses DW Source Loader library. The application configuration can have other root level fields.",
   "type": "object",
   "$defs": {
@@ -125,7 +125,7 @@
         "sourceLoadConfigVersion": {
           "type": "string",
           "description": "Version of a Source Loader json configuration",
-          "const": "1"
+          "const": "2"
         },
         "loadActions": {
           "type": "array",
@@ -647,6 +647,121 @@
                   ],
                   "unevaluatedProperties": false
                 }
+              },
+              "schemaEvolution" : {
+                "type": "object",
+                "description": "Definition of allowed changes to the data schema for consecutive loads for both versioned and non-versioned data.",
+                "properties": {
+                  "allowMetadataColumnsPrefixChange" : {
+                    "description": "If true, the \"metadataColumnsPrefix\" value can change on consecutive load",
+                    "type": "boolean"
+                  },
+                  "columnAdd": {
+                    "type": "object",
+                    "properties": {
+                      "isAllow": {
+                        "description": "When the value of isAllow is true, the data on consecutive loads can have new columns.",
+                        "type": "boolean"
+                      },
+                      "columnsToAdd": {
+                        "description": "The columns allowed to be added with optional value to populate previously loaded data. If this element is absent or empty and column add is allowed - any column can be added",
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "colNamePattern": {
+                              "type": "string",
+                              "description": "Pattern for column name allowed to be added."
+                            },
+                            "backfillValue": {
+                              "type": ["string", "number", "integer", "boolean"],
+                              "description": "Value for previously loaded data. Type should match the type of the column. If the value is omitted it is defaulted to value based on column type, and if that is not defined - null"
+                            },
+                            "unevaluatedProperties": false
+                          },
+                          "patternProperties": {
+                            "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                          },
+                          "required": [
+                            "colNamePattern"
+                          ],
+                          "unevaluatedProperties": false
+                        }
+                      },
+                      "backfillValueForStrings": {
+                        "description": "The value for new columns of string type to populate this column value for previously loaded data. If backfill value is defined for specific column, it will take precedence over this value",
+                        "type": "string"
+                      },
+                      "backfillValueForFloats": {
+                        "description": "The value for new columns of float or double type to populate this column value for previously loaded data. If backfill value is defined for specific column, it will take precedence over this value",
+                        "type": "number"
+                      },
+                      "backfillValueForIntegers": {
+                        "description": "The value for new columns of integer type to populate this column value for previously loaded data. If backfill value is defined for specific column, it will take precedence over this value",
+                        "type": "integer"
+                      },
+                      "backfillValueForBooleans": {
+                        "description": "The value for new columns of boolean type to populate this column value for previously loaded data. If backfill value is defined for specific column, it will take precedence over this value",
+                        "type": "boolean"
+                      }
+                    },
+                    "patternProperties": {
+                      "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                    },
+                    "required": [
+                      "isAllow"
+                    ],
+                    "unevaluatedProperties": false
+                  },
+                  "columnDelete": {
+                    "type": "object",
+                    "properties": {
+                      "isAllow": {
+                        "description": "When the value of isAllow is true, the data on consecutive loads can have omitted columns that will be deleted from previously loaded data.",
+                        "type": "boolean"
+                      },
+                      "columnsToDelete": {
+                        "description": "The column name pattern for columns to be deleted. If this element is absent or empty and column deletion is allowed - any column can be deleted",
+                        "type": "array",
+                        "items": { "type": "string" }
+                      }
+                    },
+                    "patternProperties": {
+                      "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                    },
+                    "required": [
+                      "isAllow"
+                    ],
+                    "unevaluatedProperties": false
+                  },
+                  "columnTypeChange": {
+                    "type": "object",
+                    "properties": {
+                      "isAllow": {
+                        "description": "When the value of isAllow is true, the column data type can be changed to that of new data.",
+                        "type": "boolean"
+                      },
+                      "columnsToChangeType": {
+                        "description": "The name pattern for columns allowed to have type changed. If this element is absent or empty and column type change is allowed - any column's type can be changed",
+                        "type": "array",
+                        "items": { "type": "string" }
+                      }
+                    },
+                    "patternProperties": {
+                      "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                    },
+                    "required": [
+                      "isAllow"
+                    ],
+                    "unevaluatedProperties": false
+                  }
+                },
+                "patternProperties": {
+                  "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
+                },
+                "required": [
+                ],
+                "unevaluatedProperties": false
               },
               "postProcess": {
                 "type": "object",

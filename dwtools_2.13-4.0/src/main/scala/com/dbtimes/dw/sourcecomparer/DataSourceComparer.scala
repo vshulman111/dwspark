@@ -52,7 +52,10 @@ object DataSourceComparer {
     //    - unique names of actions
 
     // Do Steps 1 and 2
-    errors ++= MiscHelper.validateConfigVersionAndConfigAgainstThatVersion(appConfig, schemaBaseFileName, pathToVersionField)
+    val errorsAndwarnings = MiscHelper.validateConfigVersionAndConfigAgainstThatVersion(appConfig, schemaBaseFileName, pathToVersionField)
+
+    errors ++= errorsAndwarnings._1
+    val warnings = errorsAndwarnings._2
 
     // Step 3. Validate schema in the code for components not supported by generic  schema validation
     //          Step 3 depends on schema being validated in steps 1 and 2 because it assumes that path "sourceCompare.compareScenarios" exists and each scenario has a name
@@ -76,9 +79,23 @@ object DataSourceComparer {
       errors ++= allCustomErrors.flatten
     }
 
-    if ( !errors.isEmpty ) {
-      val errorMessage = errors.mkString( "Comparer Configuration ERROR(s)\n *", "\n *", "" )
-      throw new RuntimeException(errorMessage)
+
+    val errorMessage = if (errors.nonEmpty) {
+      errors.mkString( "Comparer Configuration ERROR(s)\n *", "\n *", "" )
+    }
+    else
+      ""
+    val warningMessage = if (warnings.nonEmpty) {
+      warnings.mkString( s"""${if (errorMessage.nonEmpty) "\n" else ""}Comparer Configuration WARNINGS(s)\n *""", "\n *", "" )
+    }
+    else
+      ""
+
+    if (errors.nonEmpty) {
+      throw new RuntimeException(errorMessage + warningMessage)
+    }
+    else if(warnings.nonEmpty) {
+      comparerLog.warn(warningMessage)
     }
   }
 

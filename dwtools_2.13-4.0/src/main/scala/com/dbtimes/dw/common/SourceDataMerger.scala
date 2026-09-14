@@ -20,17 +20,16 @@ package com.dbtimes.dw.common
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date}
 
-import com.dbtimes.dw.common.DataFrameHelper.{DataFrameImplicits, concatColumns}
+import com.dbtimes.dw.common.DataFrameHelper._
 import com.dbtimes.dw.common.MiscHelper.getDateFormatted
 import LogFile.{dwlogger => appLog}
 // import org.apache.log4j.Logger
 // import org.slf4j.Logger
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession, Column}
 import org.apache.spark.sql.Observation
 import scala.collection.immutable.ListMap
-
 
 
 private[dw] trait SourceDataMerger {
@@ -52,16 +51,19 @@ private[dw] trait SourceDataMerger {
 
   private val farFutureDateYYYY_MM_DD = "2099-01-01"
 
-  protected def mergeSourceData(action: SourceDataAction, dfNewData: DataFrame, effectiveDate: Date ): DataFrame = {
-    mergeSourceData(action, true, dfNewData, false, None, None, effectiveDate)
+  protected def mergeSourceData(action: SourceDataAction, dfNewData: DataFrame, effectiveDate: Date): DataFrame = {
+    mergeSourceData(action, isFullLoad = true, dfNewData, isNewDataPreparedForMerge = false, dfAllMergeKeysAsOption = None, dfOldDataAsOption = None, effectiveDate)
   }
 
+  // Both mergeSourceDataChanges calls are used for incremental load
+  // This version mergeSourceDataChanges is used in Fact class
   protected def mergeSourceDataChanges(action: SourceDataAction, dfNewData: DataFrame, isNewDataPreparedForMerge: Boolean, dfAllMergeKeys: DataFrame, dfOldData: DataFrame, effectiveDate: Date): DataFrame = {
-    mergeSourceData(action, false, dfNewData, isNewDataPreparedForMerge, Some(dfAllMergeKeys), Some(dfOldData), effectiveDate)
+    mergeSourceData(action, isFullLoad = false, dfNewData, isNewDataPreparedForMerge, Some(dfAllMergeKeys), Some(dfOldData), effectiveDate)
   }
 
+  // This version mergeSourceDataChanges is used in ProcessorOfDBMSSource class
   protected def mergeSourceDataChanges(action: SourceDataAction, dfNewData: DataFrame, isNewDataPreparedForMerge: Boolean, dfAllMergeKeys: DataFrame, effectiveDate: Date): DataFrame = {
-    mergeSourceData(action, false, dfNewData, isNewDataPreparedForMerge, Some(dfAllMergeKeys), dfOldDataAsOption = None, effectiveDate)
+    mergeSourceData(action, isFullLoad = false, dfNewData, isNewDataPreparedForMerge, Some(dfAllMergeKeys), dfOldDataAsOption = None, effectiveDate)
   }
 
   /**
@@ -109,11 +111,12 @@ private[dw] trait SourceDataMerger {
       if (dfOldDataAsOption.isDefined) {
         dfOldDataAsOption
       } else if (action.getIsFileDestinationParquet) {
+        // This is the case for incremental load from database source
         Some(spark.read.format("org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat")
           .load(action.getDestinationFilePath))
       }
       else
-        throw new RuntimeException("""Loader ERROR: Only Parquet destination is currently supported """)
+        throw new RuntimeException(s"""${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}Merger ERROR: Only Parquet destination is currently supported """)
     }
 
     val dfNewDataPrepared = if (isNewDataPreparedForMerge)
@@ -143,26 +146,255 @@ private[dw] trait SourceDataMerger {
     val sourceHasPrimaryKey = !action.getPrimaryKeysList.isEmpty
     val sourceHasMergeKey = !action.getMergeKeysList.isEmpty
 
-    val dfResult = if (sourceHasPrimaryKey && (isFullLoad || !isFullLoad && action.getMergeKeysList == action.getPrimaryKeysList)) {
-      mergeSourceWithUniqueKey(action, isInitialLoad, isFullLoad, dfNewDataPrepared, dfStgOldAsOption, dfAllMergeKeysWithMetadataColumnsAsOption, effectiveDate)
-    }
-    else if (sourceHasMergeKey && !isFullLoad && !action.getIsVersioned) { // This case cannot currently happen for source loads because we require versioned data for incremental load.
-      // Incremental load: merge keys are different from unique keys
-      require(isInitialLoad == false, """Loader ERROR: Incremental load cannot be done on initial load """)
-      require(dfAllMergeKeysAsOption.isDefined == true, """Loader ERROR: Incremental load requires defined dfAllMergeKeysAsOption """)
-      require(action.getMergeKeysList.isEmpty == false, """Loader ERROR: Incremental load requires a list of one or more Merge Key  """)
-      mergeSourceChanges(action, dfNewDataPrepared, dfAllMergeKeysAsOption.get, dfStgOldAsOption, effectiveDate)
-    }
-    else if (sourceHasPrimaryKey || sourceHasMergeKey) {
-      throw new RuntimeException("""Loader Configuration ERROR: Unsupported combination of load attributes """)
+    val (dfNewDataWithSchemaEvolved, dfStgOldWithSchemaEvolvedAsOption) = if (!isInitialLoad) {
+      require(dfStgOldAsOption.isDefined, """Merge ERROR: Schema evolution requires previously loaded data """)
+
+      checkSchemaCompatibilityAndEvolveSchema(action, dfNewDataPrepared, dfStgOldAsOption.get)
     }
     else {
-      mergeSourceWithNoUniqueKey(action, isInitialLoad, dfNewDataPrepared, dfStgOldAsOption, effectiveDate)
+      (dfNewDataPrepared, dfStgOldAsOption)
+    }
+
+    // At this point schema evolution is done.
+    // Drop "Version", "EffectiveDateStart" and "EffectiveDateEnd" fields from new data. These fields were needed to match old and new schemas in schema evolution.
+    // On subsequent load these metadata columns will be added during processing by taking these column values from older version
+    val dfNewDataWithSchemaEvolvedWithAdjustedMetadataColumns = if (!action.getIsInitialLoad && sourceHasPrimaryKey && action.getIsVersioned) {
+      dfNewDataWithSchemaEvolved.drop(metadataCols("Version"), metadataCols("EffectiveDateStart"), metadataCols("EffectiveDateEnd"))
+    }
+    else
+      dfNewDataWithSchemaEvolved
+
+    val dfResult = if (sourceHasPrimaryKey && (isFullLoad || !isFullLoad && action.getMergeKeysList == action.getPrimaryKeysList)) {
+      mergeSourceWithUniqueKey(action, isInitialLoad, isFullLoad, dfNewDataWithSchemaEvolvedWithAdjustedMetadataColumns, dfStgOldWithSchemaEvolvedAsOption, dfAllMergeKeysWithMetadataColumnsAsOption, effectiveDate)
+    }
+    else if (sourceHasMergeKey && !isFullLoad && !action.getIsVersioned) {
+      // This case cannot currently happen for source loads because we require versioned data for incremental load,
+      // but it can happen for Fact MERGE and MERGE_PARTITION fact process mode
+      // Incremental load: merge keys are different from unique keys
+      require(isInitialLoad == false, """Merge ERROR: Incremental load cannot be done on initial load """)
+      require(dfAllMergeKeysAsOption.isDefined == true, """Merge ERROR: Incremental load requires defined dfAllMergeKeysAsOption """)
+      require(action.getMergeKeysList.isEmpty == false, """Merge ERROR: Incremental load requires a list of one or more Merge Key  """)
+      mergeSourceChanges(action, dfNewDataWithSchemaEvolvedWithAdjustedMetadataColumns, dfAllMergeKeysAsOption.get, dfStgOldWithSchemaEvolvedAsOption, effectiveDate)
+    }
+    else if (sourceHasPrimaryKey || sourceHasMergeKey) {
+      throw new RuntimeException(s"""Merge Configuration ERROR: ${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}Unsupported combination of load attributes """)
+    }
+    else {
+      mergeSourceWithNoUniqueKey(action, isInitialLoad, dfNewDataWithSchemaEvolvedWithAdjustedMetadataColumns, dfStgOldWithSchemaEvolvedAsOption, effectiveDate)
     }
 
     // Set all columns to nullable.
     // Drill and other parquet readers are complaining
     dfResult.setNullableStateForAllColumns(true)
+  }
+
+  private def checkSchemaCompatibilityAndEvolveSchema(action: SourceDataAction, dfNewData: DataFrame, dfStgOld: DataFrame): (DataFrame, Option[DataFrame]) = {
+    val newSchema: StructType = dfNewData.schema
+    val oldSchema: StructType = dfStgOld.schema
+
+    // Step 1. Determine current metadataColumnsPrefix
+    val oldMetadataColumnsPrefix = determineMetadataColumnsPrefixFromSchema(oldSchema)
+    val newMetadataColumnsPrefix = determineMetadataColumnsPrefixFromSchema(newSchema)
+
+    // Check that the number of metadata columns is the same, meaning that the new data is versioned and non-versioned or the other way around
+    val supersetOfMetadataColsForOld = metadataColsBaseNames.transform { (key, value) => oldMetadataColumnsPrefix + value } // this is deprecated in later version. Use mapValuesInPlace
+    val supersetOfMetadataColsForNew = metadataColsBaseNames.transform { (key, value) => newMetadataColumnsPrefix + value } // this is deprecated in later version. Use mapValuesInPlace
+
+    val (oldColumnsMetadata, oldColumnsData) = oldSchema.fieldNames.partition(col => supersetOfMetadataColsForOld.values.exists(_ == col))
+    val (newColumnsMetadata, newColumnsData) = newSchema.fieldNames.partition(col => supersetOfMetadataColsForNew.values.exists(_ == col))
+
+    val oldColumnsMetadataWithoutPrefix = oldColumnsMetadata.map(col => col.replace(oldMetadataColumnsPrefix, ""))
+    val newColumnsMetadataWithoutPrefix = newColumnsMetadata.map(col => col.replace(newMetadataColumnsPrefix, ""))
+
+    if (!oldColumnsMetadataWithoutPrefix.sameElements(newColumnsMetadataWithoutPrefix))
+      throw new RuntimeException(s"""Loader ERROR: ${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}Metadata columns in new data - ${newColumnsMetadataWithoutPrefix.mkString(",")} are different from existing data ${oldColumnsMetadataWithoutPrefix.mkString(",")} - most likely caused by different isVersioned flag or unique keys setting""")
+
+    if (oldMetadataColumnsPrefix == newMetadataColumnsPrefix && DataFrameHelper.compareFieldNamesTypesOrder(oldSchema, newSchema)) {
+      // return unchanged new and old data if prefix is the same and no schema changes are detected
+      (dfNewData, Some(dfStgOld))
+    }
+    else {
+      // Step 2. Compare schemas of old and new data
+      val (addedColumns, deletedColumns, changedTypeColumns) = DataFrameHelper.compareNewSchemaWithBase(newSchema, oldSchema)
+
+      //Step 3. Split added and deleted columns into two groups - data and metadata columns
+      // if prefix is the same metadata columns will not be part of added or deleted columns
+      val (addedColumnsMetadata, addedColumnsData) = addedColumns.partition(col => supersetOfMetadataColsForNew.values.exists(_ == col))
+      val (deletedColumnsMetadata, deletedColumnsData) = deletedColumns.partition(col => supersetOfMetadataColsForOld.values.exists(_ == col))
+
+      // Step 3. Check if schema evolution is allowed for detected schama changes
+      if (oldMetadataColumnsPrefix != newMetadataColumnsPrefix && !action.getIsAllowMetadataColumnsPrefixChange) {
+        throw new RuntimeException(s"""Loader ERROR: ${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""} New metadata columns prefix '$newMetadataColumnsPrefix' is different from existing prefix '$oldMetadataColumnsPrefix' (prefix change can be enabled via schema evolution)""")
+      }
+      if (addedColumnsData.nonEmpty && !action.getIsAllowColumnAdd) {
+        throw new RuntimeException(s"""Loader ERROR: ${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""} New column(s) - ${addedColumns.mkString(",")} - were added to result set (adding new columns can be enabled via schema evolution)""")
+      }
+      if (deletedColumnsData.nonEmpty && !action.getIsAllowColumnDelete) {
+        throw new RuntimeException(s"""Loader ERROR: ${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""} Column(s) ${deletedColumns.mkString(",")} were deleted from result set (deleting columns can be enabled via schema evolution)""")
+      }
+      if (changedTypeColumns.nonEmpty && !action.getIsAllowColumnTypeChange) {
+        throw new RuntimeException(s"""Loader ERROR: ${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""} Column(s)' ${changedTypeColumns.keys.mkString(",")} type was changed (changing column type can be enabled via schema evolution)""")
+      }
+
+      // At this point we checked for allowed changed for all columns as if individual columns permissions do not exist
+      // Check if changes for column names cover all added/deleted/columns and columns with the change of data type
+      val allowedColumnsToAdd = action.getColumnsToAdd
+      val columnsThatWillNotBeAdded = if (action.getIsAllowColumnAdd && allowedColumnsToAdd.nonEmpty && addedColumnsData.nonEmpty) {
+        // Check if ANY regex key matches the current string
+        addedColumnsData.filterNot { str => allowedColumnsToAdd.keys.exists(regex => regex.findFirstIn(str).isDefined) }
+      }
+      else {
+        List.empty[String]
+      }
+      if (columnsThatWillNotBeAdded.nonEmpty) {
+        appLog.info(s"""${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}The following column(s) will not be added as they did not match the name pattern: ${columnsThatWillNotBeAdded.mkString(",")}""")
+      }
+
+      // If there columns that cannot be deleted it is an error, because the new data does not have a column and that we cannot handle
+      if (action.getIsAllowColumnDelete && action.getColumnsToDelete.nonEmpty && deletedColumnsData.nonEmpty) {
+        // Check if ANY regex key matches the current string
+        val columnsThatWillNotBeDeleted = deletedColumnsData.filterNot { str => action.getColumnsToDelete.exists(regex => regex.findFirstIn(str).isDefined) }
+        if (columnsThatWillNotBeDeleted.nonEmpty)
+          throw new RuntimeException(s"""${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}The following column(s) are not present in new data, but cannot be deleted from existing data as they did not match the name pattern: ${columnsThatWillNotBeDeleted.mkString(",")}""")
+      }
+
+      // If there columns whose type cannot be changed - it is an error, because the new data has column with new type
+      if (action.getIsAllowColumnTypeChange && action.getColumnsToChangeType.nonEmpty && changedTypeColumns.nonEmpty) {
+        // Check if ANY regex key matches the current string
+        val columnsWhoseTypeWillNotBeChanged = changedTypeColumns.keys.filterNot { str => action.getColumnsToChangeType.exists(regex => regex.findFirstIn(str).isDefined) }.toList
+        if (columnsWhoseTypeWillNotBeChanged.nonEmpty)
+          throw new RuntimeException(s"""${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}The following column(s)' type changed in new data, but they do not match the specification for columns to allow type change: ${columnsWhoseTypeWillNotBeChanged.mkString(",")}""")
+      }
+
+      // Step 3. At this point schema can be evolved - do it
+      val newSchemaWithoutColumnsThatCannotBeAdded = StructType(
+        newSchema.fields.filterNot(field => columnsThatWillNotBeAdded.contains(field.name))
+      )
+
+      val addedColumnWithoutColumnsThatCannotBeAdded = addedColumnsData.diff(columnsThatWillNotBeAdded)
+      // Log details about schema evolution
+      if ( action.getIsDefinedSchemaEvolution ) {
+        if ( addedColumnWithoutColumnsThatCannotBeAdded.nonEmpty)
+          appLog.info(s"""${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}The following column(s) will be added as part of schema evolution: ${addedColumnWithoutColumnsThatCannotBeAdded.mkString(",")}""")
+        else
+          appLog.info(s"""${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}No new columns will be added as part of schema evolution""")
+
+        if ( deletedColumnsData.nonEmpty)
+          appLog.info(s"""${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}The following column(s) will be deleted as part of schema evolution: ${deletedColumnsData.mkString(",")}""")
+        else
+          appLog.info(s"""${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}No columns will be deleted as part of schema evolution""")
+
+        if ( changedTypeColumns.nonEmpty)
+          appLog.info(s"""${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}The following column(s) type will be changed as part of schema evolution: ${changedTypeColumns.map { case (colName, colType) => colName + " - from " + oldSchema(colName).dataType.typeName + " to " + colType.typeName}.mkString(", ")}""")
+        else
+          appLog.info(s"""${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}No columns will have its type changed as part of schema evolution""")
+      }
+
+      val colsForNew: Array[Column] = newSchemaWithoutColumnsThatCannotBeAdded.fields.map(field => col(field.name))
+      val colsForOld: Array[Column] = evolveOldSchema(action,
+        newSchemaWithoutColumnsThatCannotBeAdded,
+        newColumnsMetadata.zip(oldColumnsMetadata).toMap, // Map with new metadata column names mapped to old names
+        addedColumnWithoutColumnsThatCannotBeAdded,       // Added columns without the ones that cannot be added
+        changedTypeColumns)
+
+      // Recalculate RowHash on both datframes since new can have columns dropped and old columns added
+      val dfNewDataEvolved = dfNewData.select(colsForNew.toIndexedSeq: _*)
+        .drop( metadataCols("RowHash") )
+      val dfOldDataEvolved = dfStgOld.select(colsForOld.toIndexedSeq: _*)
+        .drop( metadataCols("RowHash") )
+
+      // Confirm that schemas are the the same
+      require( compareFieldNamesTypesOrder( dfNewDataEvolved.schema, dfOldDataEvolved.schema ), "Merger Internal ERROR: evolved schema for old data is different from schema of new data" )
+
+      val columnsForRowHash = dfNewDataEvolved.columns.toList
+        .diff(action.getExcludeFromVersioningColumnList)
+        .diff(newColumnsMetadata.toList)
+      ( dfNewDataEvolved
+        .withColumn(metadataCols("RowHash"), md5(concatColumns(struct(columnsForRowHash.head, columnsForRowHash.tail: _*))))
+        .selectInCorrectOrderCastToCorrectTypeAndMakeNullable( newSchemaWithoutColumnsThatCannotBeAdded ),
+        Some( dfOldDataEvolved
+          .withColumn(metadataCols("RowHash"), md5(concatColumns(struct(columnsForRowHash.head, columnsForRowHash.tail: _*))))
+          .selectInCorrectOrderCastToCorrectTypeAndMakeNullable( newSchemaWithoutColumnsThatCannotBeAdded ) ) )
+    }
+
+  }
+
+  /**
+   *
+   * @param action
+   * @param newSchema
+   * @param oldSchema
+   * @return - array of columns for oldData
+   */
+  private def evolveOldSchema(
+      action: SourceDataAction,
+      newSchema: StructType,
+      newColumnsMetadataToOldColumnsMetadata: Map[String,String],
+      addedColumns: List[String],
+      changedTypeColumns: Map[String, DataType]): Array[Column] = {
+
+    newSchema.fields.map(field => {
+      if (addedColumns.contains(field.name)) {
+        getAddedColumnBackfillValue(action, field).cast(field.dataType).as(field.name)
+      }
+      else if (changedTypeColumns.contains(field.name) && field.dataType == BooleanType) // type change for BooleanType
+        getColumnExpressionToChangeTypeToBoolean( field.name)
+      else if (changedTypeColumns.contains(field.name) && field.dataType != BooleanType) // type change for non-boolean type
+        col(field.name).cast(field.dataType).as(field.name)
+      else if ( newColumnsMetadataToOldColumnsMetadata.contains(field.name) ) // metadata columns with possible prefix change
+        col(newColumnsMetadataToOldColumnsMetadata( field.name ) ).as( field.name )
+      else
+        col(field.name)
+    }
+    )
+  }
+
+  private def getAddedColumnBackfillValue(action: SourceDataAction, field: StructField): Column = {
+
+    val backfillValuesAsOption: Option [ (Option[String], Option[Double], Option[Long], Option[Boolean] ) ] =
+    if ( action.getColumnsToAdd.keys.exists(regex => regex.findFirstIn(field.name).isDefined) ) {
+      action.getColumnsToAdd
+        .find { case (regex, _) => regex.matches(field.name) }
+        .map { case (_, value) => value }
+    }
+    else
+      Some( ( action.getBackfillValueForStrings,
+        action.getBackfillValueForFloats,
+        action.getBackfillValueForIntegers,
+        action.getBackfillValueForBooleans ) )
+
+    val ( backfillValueForStrings,
+          backfillValueForFloats,
+          backfillValueForIntegers,
+          backfillValueForBooleans ) = backfillValuesAsOption.get
+
+    val backfillValue = (field.dataType) match {
+      case (StringType) => lit( backfillValueForStrings.getOrElse(null) )
+      case (FloatType | DoubleType) => lit( backfillValueForFloats.getOrElse(null) )
+      case (ByteType | ShortType | IntegerType | LongType) => lit( backfillValueForIntegers.getOrElse(null) )
+      case (BooleanType) => lit( backfillValueForBooleans.getOrElse(null) )
+
+      // No default provided
+      case _ => lit(null)
+    };
+    backfillValue
+  }
+  
+  private def getColumnExpressionToChangeTypeToBoolean(colName: String): Column = {
+    ( when(lower(col(colName)) === "yes" || lower(col(colName)) === "y" || col(colName) === "1" || lower(col(colName)) === "true", lit(true) )
+      .when(lower(col(colName)) === "no" || lower(col(colName)) === "n" || col(colName) === "0" || lower(col(colName)) === "false", lit(false) )
+      .otherwise(lit(null)) )
+      .cast(BooleanType)
+      .as(colName)
+  }
+
+  private def determineMetadataColumnsPrefixFromSchema(schema: StructType): String = {
+    val fieldNames = schema.fields.map(f => (f.name))
+
+    val metadataColumnCreatedByAsOption = fieldNames.reverseIterator.find(s => s.contains("CreatedBy"))
+    require(metadataColumnCreatedByAsOption.isDefined, s"""Loader ERROR: The dataset with schema ${schema.simpleString} does not have 'CreatedBy' field""")
+
+    metadataColumnCreatedByAsOption.get.replace("CreatedBy", "")
   }
 
   /**
@@ -189,12 +421,15 @@ private[dw] trait SourceDataMerger {
         require(dfStgOldAsOption.isDefined) // old data has to be defined for non-initial load
         val oldDataSchema = dfStgOldAsOption.get.schema
 
+        // Do not drop these fields as they are needed for schema evolution. They will be dropped after schema evolution is completed
+/*
         val metadataColumnsToDrop = Set(metadataCols("Version"), metadataCols("EffectiveDateStart"), metadataCols("EffectiveDateEnd"))
 
         val oldDataSchemaWithoutVersionColumn = StructType(
           oldDataSchema.fields.filterNot(item => metadataColumnsToDrop(item.name))
         )
-        val dfNewDataWithMetadataColumns = dfNewData.setNewSchema(oldDataSchemaWithoutVersionColumn)
+*/
+        val dfNewDataWithMetadataColumns = dfNewData.setNewSchema(oldDataSchema)
 
         if (action.getIsDebugDwLib) {
           dfNewDataWithMetadataColumns.show()
@@ -205,7 +440,7 @@ private[dw] trait SourceDataMerger {
       }
       else {
         // initial load and the schema is empty
-        throw new RuntimeException("""Loader ERROR: The data is empty with no schema on initial load. Check your data source and query""")
+        throw new RuntimeException(s"""Loader ERROR: ${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}The data is empty with no schema on initial load. Check your data source and query""")
       }
     }
     else {
@@ -278,11 +513,12 @@ private[dw] trait SourceDataMerger {
           appLog.info("Distinct count: " + dfNewNoDups.count())
         }
 
-        // Only add version on initial load
-        val dfStgNew = if (isInitialLoad && sourceHasPrimaryKey && action.getIsVersioned) {
+        // We used to add version and effective data start and end only on initial load
+        // Before:  Only add these metadata columns on initial load because the data will be saved after that without additional transformations
+        //          If this is subsequent load the same metadata columns will be added during processing by taking these column values from older version
+        // But for schema evolution we need these columns so we can match all columns including metadata columns
+        val dfStgNew = if (sourceHasPrimaryKey && action.getIsVersioned) {
           appLog.info("Running initial load for versioned data source with unique keys")
-          // Only add these metadata columns on initial load because the data will be saved after that without additional transformations
-          // If this is subsequent load the same metadata columns will be added during processing
           dfNewNoDups
             .withColumns(ListMap( // ListMap preserves the order of columns
               metadataCols("Version") -> {
@@ -304,7 +540,8 @@ private[dw] trait SourceDataMerger {
                       .withColumn(metadataCols("EffectiveDateStart"), to_date(lit(effDateYYYY_MM_DD)))
                       .withColumn(metadataCols("EffectiveDateEnd"), to_date(lit(farFutureDateYYYY_MM_DD))) // This column must be the last one. It will be replaced during versioning process
           */
-        } else {
+        }
+        else {
           dfNewNoDups
         }
         dfStgNew
@@ -664,7 +901,7 @@ private[dw] trait SourceDataMerger {
         FileHelper.saveDataFrameAsParquetAndMoveToParentDir(loadControlDf, "loadControl", action.getLoadControlParquetFileDir)
       }
       else {
-        throw new RuntimeException("""Loader ERROR: Cannot save Load Control record. Only Parquet format is currently supported. Fix configuration for this action to specify "fileLoadControl.parquet" """)
+        throw new RuntimeException(s"""Loader ERROR: ${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}Cannot save Load Control record. Only Parquet format is currently supported. Fix configuration for this action to specify "fileLoadControl.parquet" """)
       }
     }
   }
@@ -737,8 +974,8 @@ private[dw] trait SourceDataMerger {
 
       // Incremental load
       if (!isFullLoad) {
-        require(dfAllMergeKeysWithMetadataColumnsAsOption.isDefined == true, """Loader ERROR: Incremental load requires defined dfAllMergeKeysAsOption """)
-        require(action.getMergeKeysList == action.getPrimaryKeysList, """Loader ERROR: Merge and Primary keys must be the same for the incremental load""")
+        require(dfAllMergeKeysWithMetadataColumnsAsOption.isDefined == true, """Merge ERROR: Incremental load requires defined dfAllMergeKeysAsOption """)
+        require(action.getMergeKeysList == action.getPrimaryKeysList, """Merge ERROR: Merge and Primary keys must be the same for the incremental load""")
         dfAllMergeKeysWithMetadataColumnsAsOption
           .get
           .createOrReplaceTempView("AllMergeKeys")
@@ -764,6 +1001,20 @@ private[dw] trait SourceDataMerger {
 
   }
 
+  /**
+   * This merge does not take effective date into account.
+   * It currently only used for Fact MERGE and MERGE_PARTITION
+   * Old data rows are merged with new based on the merge key columns.
+   * All rows in old data with the same merge key are replaced with new ones.
+   * The old rows with merge keys that do not exist in the new fact table will remain.
+   *
+   * @param action
+   * @param dfNewData
+   * @param dfAllMergeKeys
+   * @param dfStgOldAsOption
+   * @param effectiveDate
+   * @return
+   */
   private def mergeSourceChanges(
       action: SourceDataAction,
       dfNewData: DataFrame,
@@ -780,7 +1031,7 @@ private[dw] trait SourceDataMerger {
     val dfStg = if (dfStgOldAsOption.isDefined) {
       dfStgOldAsOption.get
     } else {
-      throw new RuntimeException("""Loader ERROR: File based source to merge changes currently not supported """)
+      throw new RuntimeException(s"""Merge ERROR:${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}File based source to merge changes currently not supported """)
     }
     dfStg.createOrReplaceTempView("StgData") // This is the existing file that we want to amend to create a new one and replace the existing one with the new
 
@@ -1046,6 +1297,17 @@ private[dw] trait SourceDataMerger {
     dfStgNew
   }
 
+  /**
+   * The data maintained here is the single version based on unique key only and disregarding effective date.
+   * It is the copy of new data with only exception that it allows for incremental load and
+   * maintains original effective date for unchanged data. If any data is deleted it will be deleted from this
+   * resulting dataset.
+   * If we do not want the latest version of the data, but a copy for every effective date,do not specify unique key in the data schema.
+   *
+   * @param action
+   * @param isFullLoad
+   * @return
+   */
   private def createNonVersionedResultForSourceWithUniqueKey(action: SourceDataAction, isFullLoad: Boolean): DataFrame = {
 
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
@@ -1054,7 +1316,7 @@ private[dw] trait SourceDataMerger {
     val sqlChanged
     =
       s"""
-         | SELECT stg.*
+         | SELECT new.*
          | FROM StgData AS stg
          |   INNER JOIN NewData AS new ON   stg.${metadataCols("RowUniqueKey")} = new.${metadataCols("RowUniqueKey")}
          |                              AND stg.${metadataCols("RowHash")} != new.${metadataCols("RowHash")}
@@ -1127,7 +1389,7 @@ private[dw] trait SourceDataMerger {
 
   private def mergeSourceWithNoUniqueKey(action: SourceDataAction, isInitialLoad: Boolean, dfNewData: DataFrame, dfStgOldAsOption: Option[DataFrame], effectiveDate: Date): DataFrame = {
 
-    require( !action.getIsVersioned, """Loader Internal ERROR: Merge with no unique keys was called for versioned load""")
+    require(!action.getIsVersioned, """Loader Internal ERROR: Merge with no unique keys was called for versioned load""")
 
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
 
@@ -1189,7 +1451,7 @@ private[dw] trait SourceDataMerger {
     val dfStgNewWithNullableMetadataCols = dfStgNew.setNullableStateForAllColumns(true)
 
     if (!action.getIsFileDestinationParquet) {
-      throw new RuntimeException("""Loader ERROR: Only Parquet destination is currently supported """)
+      throw new RuntimeException(s"""Loader ERROR:${if (action.getName.nonEmpty) "Load action " + action.getName + ". " else ""}Only Parquet destination is currently supported """)
     }
 
     if (action.getIsDebugDwLib) {

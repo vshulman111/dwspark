@@ -30,18 +30,19 @@ import scala.reflect.runtime.universe._
 
 private [dw] object MiscHelper {
 
-  /**
+/**
    *
    * @param appConfig
    * @param schemaBaseFileName
    * @param pathToVersionField - this path is specific to each configuration, e.g., for source loader it would be "sourceLoad.sourceLoadConfigVersion"
    *                           Given that I have schemas with version field name, this can be detected automatically, but i will leave this for later - TODO
-   * @return
+   * @return - tuple (errors,warnings)
    */
+
   private[dw] def validateConfigVersionAndConfigAgainstThatVersion(
       appConfig: Config,
       schemaBaseFileName: String,
-      pathToVersionField: String ): Seq[String] = {
+      pathToVersionField: String ): ( Seq[String], Seq[String] ) = {
     val schemaVersionValidationFileName = schemaBaseFileName + "_version.json"
 
     // Verify appConfig
@@ -51,7 +52,7 @@ private [dw] object MiscHelper {
 
     val jsonToValidate = appConfig.root().render(ConfigRenderOptions.concise());
     val factory = SchemaRegistry.withDialect(Dialects.getDraft202012(), builder => builder.schemaRegistryConfig(schemaRegistryConfig));
-    var errors: mutable.Seq[String] = mutable.Seq.empty[String]
+    var errorsAndWarnings: mutable.Seq[String] = mutable.Seq.empty[String]
 
     // Validate schema in three steps:
     // Step 1. Validate schema version of configuration file
@@ -59,7 +60,7 @@ private [dw] object MiscHelper {
     // Step 3. Validate schema in the code for components not supported by generic  schema validation
     //    - unique names of actions
 
-    for (step <- 1 to 2) {
+    for (step <- (1 to 2).takeWhile( _ => errorsAndWarnings.isEmpty)) { // if step validation failed do not continue to the next step - return errors from first step that validates version
 
       val configSchema = ConfigFactory.parseResources(
           if ( step == 1 ) {
@@ -79,12 +80,12 @@ private [dw] object MiscHelper {
       // prepare return messages
       if (!validationMessages.isEmpty) {
         val listValidationMessages = validationMessages.asScala
-        listValidationMessages.foreach(message => errors = errors :+ message.toString)
-        return errors.toSeq // if step validation failed do not continue to the next step - return the errors
+        listValidationMessages.foreach(message => errorsAndWarnings = errorsAndWarnings :+ message.toString)
       }
     }
 
-    errors.toSeq
+    // Split into errors and warnings
+    errorsAndWarnings.toSeq.partition(!_.contains("[WARN]"))
   }
 
   private[dw] def getDateFormatted(date: Date, formatPattern: String, offset: Int = 0): String = {

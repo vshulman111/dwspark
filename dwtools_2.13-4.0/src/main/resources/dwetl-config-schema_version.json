@@ -11,7 +11,7 @@
         "dwEtlConfigVersion": {
           "type": "string",
           "description": "version of an etl json configuration",
-          "enum": ["1"]
+          "enum": ["1","2"]
         }
       },
       "patternProperties": {

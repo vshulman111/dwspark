@@ -18,7 +18,9 @@
 package com.dbtimes.dw.common
 
 import com.dbtimes.dw.common.DbmsConstants._
+import LogFile.{dwlogger => appLog}
 
+import scala.util.control.Breaks._
 import java.text.SimpleDateFormat
 import java.text.DateFormat
 import java.util.Calendar
@@ -168,24 +170,29 @@ private[dw] object DataFrameHelper {
         dbmsAttributesForMinMax("customSchema") = schemaForPartitionColumn.toDDL
 
         val iterations = List("lowerBound", "upperBound")
-        for (iteration <- iterations) {
-          val baseStatement = if (iteration == "lowerBound")
-            dbms.statementForMinValue
-          else
-            dbms.statementForMaxValue
+        breakable {
+          for (iteration <- iterations) {
+            val baseStatement = if (iteration == "lowerBound")
+              dbms.statementForMinValue
+            else
+              dbms.statementForMaxValue
 
-          dbmsAttributesForMinMax("dbtable") = baseStatement
-            .replace("<@PartitionColumn>", partitionColumnAsOption.get)
-            .replace("<@SourceTable>", sourceTableAsOption.get)
+            dbmsAttributesForMinMax("dbtable") = baseStatement
+              .replace("<@PartitionColumn>", partitionColumnAsOption.get)
+              .replace("<@SourceTable>", sourceTableAsOption.get)
 
-          val minMax = spark.read.format("jdbc")
-            .options(dbmsAttributesForMinMax)
-            .load().head().get(0)
+            val minMax = spark.read.format("jdbc")
+              .options(dbmsAttributesForMinMax)
+              .load().head().get(0)
 
-          if (minMax == null)
-            throw new RuntimeException(s"""Loader ERROR: Cannot automatically set lower and upper bounds for partition column ${partitionColumnAsOption.get} as all values are NULL. Set "lowerBound" and "upperBound" in configuration and re-run the load""")
+            if (minMax == null) {
+              appLog.warn(s"""Cannot automatically set lower and upper bounds for partition column ${partitionColumnAsOption.get} as all values are NULL. Removing partitioning.""")
+              dbmsAttributes --= List("partitionColumn", "numPartitions")
+              break()
+            }
 
-          dbmsAttributes(iteration) = minMax.toString
+            dbmsAttributes(iteration) = minMax.toString
+          }
         }
       }
 
@@ -285,6 +292,39 @@ private[dw] object DataFrameHelper {
     val fields2 = schema2.fields.map(f => (f.name, f.dataType))
 
     fields1.sameElements(fields2)
+  }
+
+
+  /**
+   * Compares new schema with base schema. What is new schema and base schema will depend on the context
+   *
+   * @param newSchema  - new schema
+   * @param baseSchema - original or base schema
+   * @return tuple with three values:
+   *         - List of new columns
+   *         - List of missing columns
+   *         - Map of column names with type changes: column name mapped to new column type
+   */
+  def compareNewSchemaWithBase( newSchema: StructType, baseSchema: StructType ): ( List[String], List[String], Map[String, DataType] ) = {
+    val fieldsBase = baseSchema.fields.map(f => (f.name, f.dataType))
+    val fieldsNew  = newSchema.fields.map(f => (f.name, f.dataType))
+
+    val fieldNamesBase = fieldsBase.map(_._1).toList
+    val fieldNamesNew = fieldsNew.map(_._1).toList
+
+    val addedColumns = fieldNamesNew.diff(fieldNamesBase)
+    val deletedColumns = fieldNamesBase.diff(fieldNamesNew)
+
+    val mapFieldsNew = fieldsNew.toMap
+    val mapfieldsBase = fieldsBase.toMap
+
+    val fieldsNamesWithChangedType = mapfieldsBase.keys.filter { key =>
+      mapFieldsNew.get(key).exists(_ != mapfieldsBase(key))
+    }
+
+    val fieldsWithChangedType = fieldsNew.filter { case (key, _) => fieldsNamesWithChangedType.toSet.contains(key) }
+
+    ( addedColumns, deletedColumns, fieldsWithChangedType.toMap )
   }
 
   /**
