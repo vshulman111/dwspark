@@ -18,7 +18,7 @@
   },
   "dwEtl":
   {
-    "dwEtlConfigVersion": "1",
+    "dwEtlConfigVersion": "2",
     "jobType": "LoadDimsFacts",
     "isInitialLoad": true,
     "fileEtlLog": {

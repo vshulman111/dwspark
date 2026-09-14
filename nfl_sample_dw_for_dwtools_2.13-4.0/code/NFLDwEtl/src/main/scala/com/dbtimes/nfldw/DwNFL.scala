@@ -47,7 +47,7 @@ object DwNFL  extends LazyLogging {
   private var isDebug: Boolean = false
   val etlLogger = logger
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val configFileName = if (args.length >= 1) args(0) else throw new RuntimeException("""ERROR: Need to pass a parameter - configuration file name """)
     // val appConfig = ConfigFactory.load(configFileName)
