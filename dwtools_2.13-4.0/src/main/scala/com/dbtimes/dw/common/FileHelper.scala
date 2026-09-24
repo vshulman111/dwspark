@@ -17,6 +17,8 @@
 */
 package com.dbtimes.dw.common
 
+import LogFile.{dwlogger => appLog}
+
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date}
 import java.nio.file.{FileSystems} // only used to get the path separator
@@ -75,18 +77,23 @@ private [dw] object FileHelper {
   private def moveDirectoryFiles(sourceDir: String, destDir: String, filterExpression: String => Boolean = (filePath: String) => true): Unit = {
 
     val fileSeparator = FileSystems.getDefault().getSeparator()
+
+    appLog.info(s"""Moving files from '${sourceDir}' to '${destDir}' directry. File separator character is '${fileSeparator}' """)
+
     val sourceDirWithNoLastSeparator = if (sourceDir.takeRight(1) == fileSeparator) sourceDir.substring(0, sourceDir.length - 1) else sourceDir
     val destDirWithNoLastSeparator = if (destDir.takeRight(1) == fileSeparator) destDir.substring(0, destDir.length - 1) else destDir
 
-    val filesInSourceDirectory = FileHelper.getFilesInDirectory(sourceDirWithNoLastSeparator, false, true, false, filterExpression)
+    val filesInSourceDirectory = FileHelper.getFilesInDirectory(sourceDirWithNoLastSeparator, isRecursive = false, isGetFilesOnly= true, isGetDirectoriesOnly = false, filterExpression)
 
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
     val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
 
-    filesInSourceDirectory.foreach { fileName =>
+    filesInSourceDirectory.foreach { fileName => {
+      appLog.info(s"""Renaming file ${fileName} to '${fileName.replace(sourceDirWithNoLastSeparator, destDirWithNoLastSeparator)}' """)
       fs.rename(
         new HadoopPath(fileName), // source
         new HadoopPath(fileName.replace(sourceDirWithNoLastSeparator, destDirWithNoLastSeparator)))
+    }
     }
   }
 

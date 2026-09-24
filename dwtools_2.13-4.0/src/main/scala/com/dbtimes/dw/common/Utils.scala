@@ -19,6 +19,9 @@ package com.dbtimes.dw.common
 
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import java.util.{Calendar, Date}
+import org.apache.spark.sql.{SparkSession}
+
+import LogFile.{dwlogger => appLog}
 
 /***
  * Exposes some methods
@@ -50,6 +53,19 @@ object Utils {
 
   def createFileNameWithCurrentTimestamp(filePathDest: String, sourceFilePathOrUrl: String, defaultFileName: String): String = {
     FileHelper.createFileNameWithCurrentTimestamp(filePathDest, sourceFilePathOrUrl, defaultFileName)
+  }
+
+  def isSparkRunningLocally(): Boolean = {
+    val spark = SparkSession.builder().getOrCreate()
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    val defaultFS = hadoopConf.get("fs.defaultFS", "")
+    val masterLower = spark.sparkContext.master.toLowerCase
+
+    appLog.info( s"""Determined Hadoop default FS - ${defaultFS}, master - ${masterLower} """ )
+    // Windows: defaultFS - file:///, masterLower - local
+    // Databricks/Azure: defaultFS - dbfs:///, masterLower - local[*, 4]
+
+    defaultFS.startsWith("file:")
   }
 
 }

@@ -88,7 +88,7 @@
               },
               "timestampColumn": {
                 "type": "string",
-                "description": "A column in a staging source data that is has load timestamp. Timestamp can be used for incremental processing of dimension in subsequent ETL runs."
+                "description": "A column in a staging source data that has source load timestamp. Timestamp can be used for incremental processing of dimension in subsequent ETL runs."
               },
               "effectiveDateRule": {
                 "type": "string",

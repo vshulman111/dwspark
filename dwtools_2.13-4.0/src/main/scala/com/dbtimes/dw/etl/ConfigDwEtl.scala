@@ -19,7 +19,7 @@
 package com.dbtimes.dw.etl
 
 import java.sql.Timestamp
-import java.nio.file.{FileSystems, Files, Path => JavaPath}
+import java.nio.file.{FileSystems} // only used to get the path separator
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import EffectiveDateRule.EffectiveDateRule

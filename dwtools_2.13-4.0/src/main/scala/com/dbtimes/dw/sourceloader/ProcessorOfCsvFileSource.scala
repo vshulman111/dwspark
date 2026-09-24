@@ -66,9 +66,7 @@ private[sourceloader] class ProcessorOfCsvFileSource(private val action: LoadAct
   }
 
   private def splitCsvString( csvString: String, escapeCharacter: Char, isMultilineCsvData: Boolean ): Array[String] = {
-
     val rawRows = ListBuffer[String]()
-
     val parser = new RFC4180ParserBuilder()
       // .withSeparator(',')
       // .withQuoteChar('"')
@@ -102,67 +100,7 @@ private[sourceloader] class ProcessorOfCsvFileSource(private val action: LoadAct
     // Convert the ListBuffer to a flat 1D Array[String]
     val arrayOfRows: Array[String] = rawRows.toArray
     arrayOfRows
-
-/*
-    val rows: List[Array[String]] = reader.readAll().asScala.toList
-    rows.map(_.mkString(",")).toArray
-*/
-
-  /*
-    // " matches the opening double quote.
-    // [^"\\]* matches any character that is not a quote or a backslash.
-    // (?:""[^"\\]*)* is a non-capturing group. It matches a pair of double quotes ""
-    //    (the CSV escape sequence) followed by any non-quote characters, repeated zero or more times.
-    // " matches the closing double quote.
-    val regex: Regex = if ( escapeCharacter == '"' ) {
-      """"([^"]*(?:""[^"]*)*)"""".r
-      // """"([^"\\]*(?:""[^"\\]*)*)"""".r
-    } else if ( escapeCharacter == '\\' )
-      """"([^"\\]*(?:\\.[^"\\]*)*)"""".r
-      // """"(?:[^"\\]|\\.)*"""".r
-    else
-      s"""(?:\\$escapeCharacter")|("(?:[^"]|\\$escapeCharacter")*")|([^,"]+)""".r  // TODO fix this to look similar to the other two
-
-    val result = if (isMultilineCsvData)
-      regex.replaceAllIn(csvString, m => {
-
-        val replaced = if ( escapeCharacter == '"' || escapeCharacter == '\\'  ) {
-          // m.matched contains the entire quoted string including the outer quotes
-          m.matched
-            .replace("\r", "R:@#!-r")
-            .replace("\n", "N:@#!-n")
-        }
-        else {
-          if (m.group(1) != null) {
-            // We found a double-quoted block. Replace the target char inside it.
-            m.group(1)
-              .replace("\r", "R:@#!-r")
-              .replace("\n", "N:@#!-n")
-          } else {
-            // Keep escaped quotes and outside text exactly as they are
-            m.matched
-          }
-        }
-        Regex.quoteReplacement(replaced)
-    })
-    else
-      csvString
-
-
-    val splitCsv = result.split("\\r?\\n")
-
-    // restore back \r and \n
-
-    val restoredSplitCsv = if ( isMultilineCsvData)
-      splitCsv.map( elem => elem.replace( "R:@#!-r", "\r" ).replace( "N:@#!-n", "\n" ) )
-    else
-      splitCsv
-
-    restoredSplitCsv
-  */
-
   }
-
 
   private[sourceloader] def processFile(sourceFilePathOrData: String): Boolean = {
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
