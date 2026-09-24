@@ -349,7 +349,7 @@ object ModelObject {
    * @return DataFrame with a single column "EffDate" of DateType. "EffDate" is a well known name to be used in the code
    */
   private def getEffectiveDatesToProcessForIncrLoadBasedOnConfig(configDwEtl: ConfigDwEtl, modelObjectName: String): DataFrame = {
-    getEffectiveDatesToProcessForIncrLoad(configDwEtl, modelObjectName, None)
+    getEffectiveDatesToProcessForIncrLoad(configDwEtl, modelObjectName, dfDatesOverriddenBySpecificObjectAsOption = None)
   }
 
   private def getEffectiveDatesToProcessForIncrLoadBasedOnOverride(configDwEtl: ConfigDwEtl, modelObjectName: String, dfDatesOverriddenBySpecificObject: DataFrame): DataFrame = {
@@ -368,7 +368,8 @@ object ModelObject {
 
     // This result set can have null for source Moniker if some dimension does not use the source directly, like DimDate or static dimension.
     // This is fine because other dimensions will have the source that is used to determine dates, or even if we load just one dimension that does not have
-    // a source it will still have effective date that is derived from the source indirectly, like can be in case of DimDate
+    // a source it will still have effective date that is derived from the source that has "isDefaultForEffectiveDate" indirectly,
+    // like can be in case of DimDate
     // For example,
     // +-------------+--------------------+--------------------+
     // |SourceMoniker|LastProcessedEffDate|  MaxSourceTimestamp|
@@ -429,7 +430,7 @@ object ModelObject {
             |SELECT effDateSource.$effectiveDateColName
             |FROM $viewEffectiveDates AS effDateSource
             |WHERE effDateSource.$effectiveDateColName >
-            |       ( SELECT MAX( LastProcessedEffDate ) AS LastProcessedEffDate   -- this is the same select as on line 434. Did it to get rid of CTEs which Spark does not like
+            |       ( SELECT MAX( LastProcessedEffDate ) AS LastProcessedEffDate   -- this is the same select as next SELECT MAX( LastProcessedEffDate ) AS LastProcessedEffDate. Did it to get rid of CTEs which Spark does not like
             |         FROM $viewLastProcessedEffectiveDateTimestamp
             |         WHERE SourceMoniker IN ( ${monikersForModelObject.mkString("'", "', '", "'")} )
             |       )

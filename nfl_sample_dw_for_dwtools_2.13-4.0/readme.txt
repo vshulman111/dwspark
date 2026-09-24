@@ -9,16 +9,17 @@ See the License for the specific language governing permissions and limitations 
 This sample implementation uses public NFL data.
 See Dimensional Model design in NFLDataWarehouse.docx
 
-The paths in this implementation is for Windows. If running on UNIX the following components would need to change
-- file paths in application json configuration files
+
+1. Running locally on Windows
+-----------------------------
+The paths in json configurations use c: drive.
 	- C:\dwspark\nfl_sample_dw_for_dwtools_2.13-4.0\code\NFLDataSourceLoader\src\main\resources\nfl.json
 	- C:\dwspark\nfl_sample_dw_for_dwtools_2.13-4.0\code\NFLDataSourceRecon\src\main\resources\nfl_recon.json
 	- C:\dwspark\nfl_sample_dw_for_dwtools_2.13-4.0\code\NFLDwEtl\src\main\resources\nfl_initial.json
-- scripts in C:\dwspark\nfl_sample_dw_for_dwtools_2.13-4.0\bin directory
 
 To build the project 
 - create top level directory C:\dwspark
-- pull folder nfl_sample_dw_for_dwtools_2.13-4.0 with all sub-folders
+- pull folder nfl_sample_dw_for_dwtools_2.13-4.0 with all sub-folders from github.com/vshulman111/dwspark.git
 - use Maven for all three applications in ..\code directory. For example,
 	cd C:\dwspark\nfl_sample_dw_for_dwtools_2.13-4.0\code\NFLDataSourceLoader
 	mvn clean package
@@ -26,3 +27,18 @@ To build the project
 to run locally 
 - cd C:\dwspark\nfl_sample_dw_for_dwtools_2.13-4.0\bin
 - use run commands
+
+2. Running on Databricks/Azure
+------------------------------
+To build the project add -P cluster to maven build command - that will create a jar file without spark libraries that are provided by Databricks environment
+- use Maven for all three applications in ..\code directory. For example,
+	mvn clean package -P cluster
+
+- The paths in json configurations use dbfs: location
+- Sample configurations for running jobs
+	- C:\dwspark\nfl_sample_dw_for_dwtools_2.13-4.0\code\NFLDataSourceLoader\src\main\resources\nfl_dbr_azure.json
+	- C:\dwspark\nfl_sample_dw_for_dwtools_2.13-4.0\code\NFLDataSourceRecon\src\main\resources\nfl_recon_dbr_azure.json
+	- C:\dwspark\nfl_sample_dw_for_dwtools_2.13-4.0\code\NFLDwEtl\src\main\resources\nfl_initial_dbr_azure.json
+
+- Make sure the there is no spark.stop() call in your application as it causes Spark to through an Exception - Spark is managed outside of application code 
+- Do not initialize spark in the code, do it in Spark Cluster->Advanced->Spark->Spark config  

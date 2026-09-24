@@ -65,7 +65,8 @@ object DwNFL  extends LazyLogging {
     // ETL process to build or update dimensions and fact tables
     ModelObject.runEtl(appConfig )
 
-    spark.stop()
+    if( Utils.isSparkRunningLocally() )
+      spark.stop()
   }
 
   def getIsDebug: Boolean = isDebug

@@ -42,7 +42,8 @@ object SrcReconNFL extends LazyLogging {
 
     DataSourceComparer.compare(appConfig )
 
-    spark.stop()
+    if( Utils.isSparkRunningLocally() )
+      spark.stop()
 
     logger.info( "Completed NFL Recon" )
   }

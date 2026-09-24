@@ -27,6 +27,7 @@ import com.dbtimes.dw.common.Utils
 import com.typesafe.scalalogging.LazyLogging
 
 object SrcLoaderNFL extends LazyLogging {
+  val loaderLogger = logger
 
   def main(args: Array[String]): Unit = {
 
@@ -38,8 +39,11 @@ object SrcLoaderNFL extends LazyLogging {
 
     val sparkSessionBuilder = SrcLoaderNFL.configureSparkSession(appConfig)
     val spark = sparkSessionBuilder.getOrCreate()
+
     DataSourceLoader.loadData(appConfig )
-    spark.stop()
+    
+	if( Utils.isSparkRunningLocally() )
+      spark.stop()
   }
 
   def configureSparkSession(appConfig: Config): SparkSession.Builder = {

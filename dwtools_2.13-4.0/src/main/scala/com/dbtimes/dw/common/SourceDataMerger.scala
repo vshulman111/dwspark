@@ -97,7 +97,7 @@ private[dw] trait SourceDataMerger {
       effectiveDate: Date): DataFrame = {
 
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
-    metadataCols = metadataColsBaseNames.transform { (key, value) => action.getMetadataColumnPrefix + value } // this is deprecated in later version. Use mapValuesInPlace
+    metadataCols = metadataColsBaseNames.transform { (key, value) => action.getMetadataColumnPrefix + value }
 
     val isInitialLoad = action.getIsInitialLoad
 
@@ -197,8 +197,8 @@ private[dw] trait SourceDataMerger {
     val newMetadataColumnsPrefix = determineMetadataColumnsPrefixFromSchema(newSchema)
 
     // Check that the number of metadata columns is the same, meaning that the new data is versioned and non-versioned or the other way around
-    val supersetOfMetadataColsForOld = metadataColsBaseNames.transform { (key, value) => oldMetadataColumnsPrefix + value } // this is deprecated in later version. Use mapValuesInPlace
-    val supersetOfMetadataColsForNew = metadataColsBaseNames.transform { (key, value) => newMetadataColumnsPrefix + value } // this is deprecated in later version. Use mapValuesInPlace
+    val supersetOfMetadataColsForOld = metadataColsBaseNames.transform { (key, value) => oldMetadataColumnsPrefix + value }
+    val supersetOfMetadataColsForNew = metadataColsBaseNames.transform { (key, value) => newMetadataColumnsPrefix + value }
 
     val (oldColumnsMetadata, oldColumnsData) = oldSchema.fieldNames.partition(col => supersetOfMetadataColsForOld.values.exists(_ == col))
     val (newColumnsMetadata, newColumnsData) = newSchema.fieldNames.partition(col => supersetOfMetadataColsForNew.values.exists(_ == col))
@@ -420,15 +420,6 @@ private[dw] trait SourceDataMerger {
       if (!isInitialLoad) {
         require(dfStgOldAsOption.isDefined) // old data has to be defined for non-initial load
         val oldDataSchema = dfStgOldAsOption.get.schema
-
-        // Do not drop these fields as they are needed for schema evolution. They will be dropped after schema evolution is completed
-/*
-        val metadataColumnsToDrop = Set(metadataCols("Version"), metadataCols("EffectiveDateStart"), metadataCols("EffectiveDateEnd"))
-
-        val oldDataSchemaWithoutVersionColumn = StructType(
-          oldDataSchema.fields.filterNot(item => metadataColumnsToDrop(item.name))
-        )
-*/
         val dfNewDataWithMetadataColumns = dfNewData.setNewSchema(oldDataSchema)
 
         if (action.getIsDebugDwLib) {
@@ -444,7 +435,7 @@ private[dw] trait SourceDataMerger {
       }
     }
     else {
-      metadataCols = metadataColsBaseNames.transform { (key, value) => action.getMetadataColumnPrefix + value } // this is deprecated in later version. Use mapValuesInPlace
+      metadataCols = metadataColsBaseNames.transform { (key, value) => action.getMetadataColumnPrefix + value }
 
       val effDateYYYY_MM_DD = getDateFormatted(effectiveDate, "yyyy-MM-dd")
       val primaryKeys = action.getPrimaryKeysList
@@ -487,17 +478,6 @@ private[dw] trait SourceDataMerger {
             }
           ))
 
-        /*
-                  .withColumn(metadataCols("RowUniqueKey"), if (primaryKeys.isEmpty) lit(null).cast(StringType) else concatColumns(struct(primaryKeys.head, primaryKeys.tail: _*)))
-                  .withColumn(metadataCols("RowMergeKey"), if (mergeKeys.isEmpty) lit(null).cast(StringType) else concatColumns(struct(mergeKeys.head, mergeKeys.tail: _*)))
-                  // Before there was expression struct("*") which unintentionally included two just added metadata columns
-                  // "RowUniqueKey" and "RowMergeKey". Those columns were not causing an issue but they are not needed in RowHash.
-                  .withColumn(metadataCols("RowHash"), md5(concatColumns(struct(columnsForRowHash.head, columnsForRowHash.tail: _*))))
-                  .withColumn(metadataCols("RowTimestamp"), current_timestamp()) // in DB this is ROWVERSION. Here we assume that there is some time between loads that will allow to use timestamp to determine what changed since last load. !! important: we need to maintan this for any changes to the row, like expiring a row
-                  .withColumn(metadataCols("CreatedOn"), current_timestamp())
-                  .withColumn(metadataCols("CreatedBy"), lit(System.getProperty("user.name"))) // identity of who runs the job
-        */
-
         if (action.getIsDebugDwLib) {
           appLog.info("All rows count: " + dfNewDataWithMetadataColumnsExceptVersion.count())
         }
@@ -517,8 +497,9 @@ private[dw] trait SourceDataMerger {
         // Before:  Only add these metadata columns on initial load because the data will be saved after that without additional transformations
         //          If this is subsequent load the same metadata columns will be added during processing by taking these column values from older version
         // But for schema evolution we need these columns so we can match all columns including metadata columns
+        //     After schema evolution comparison is completed these columns will be dropped and the old processing will resume
         val dfStgNew = if (sourceHasPrimaryKey && action.getIsVersioned) {
-          appLog.info("Running initial load for versioned data source with unique keys")
+          appLog.info("Running load for versioned data source with unique keys")
           dfNewNoDups
             .withColumns(ListMap( // ListMap preserves the order of columns
               metadataCols("Version") -> {
@@ -534,12 +515,11 @@ private[dw] trait SourceDataMerger {
                 when(value.isNotNull, value).otherwise(lit(null))
               }
             ))
-
-          /*
-                      .withColumn(metadataCols("Version"), lit(1)) // set version to 1 for new data
-                      .withColumn(metadataCols("EffectiveDateStart"), to_date(lit(effDateYYYY_MM_DD)))
-                      .withColumn(metadataCols("EffectiveDateEnd"), to_date(lit(farFutureDateYYYY_MM_DD))) // This column must be the last one. It will be replaced during versioning process
-          */
+        }
+        else if (sourceHasPrimaryKey && !action.getIsVersioned) {
+          appLog.info("Running load for non-versioned data source with unique keys")
+          dfNewNoDups
+            .withColumn(metadataCols("EffectiveDate"), when(rand().isNotNull, to_date(lit(effDateYYYY_MM_DD))).otherwise(lit(null)) )
         }
         else {
           dfNewNoDups
@@ -563,7 +543,7 @@ private[dw] trait SourceDataMerger {
               when(value.isNotNull, value).otherwise(lit(null))
             },
             metadataCols("EffectiveDate") -> {
-              val value = to_date(lit(effDateYYYY_MM_DD)); // This column must be the last one. It will be replaced during versioning process
+              val value = to_date(lit(effDateYYYY_MM_DD));
               when(value.isNotNull, value).otherwise(lit(null))
             }
           ))
@@ -885,11 +865,6 @@ private[dw] trait SourceDataMerger {
             if (effectiveDate == null) to_date(lit(null)) else to_date(lit(getDateFormatted(effectiveDate, "yyyy-MM-dd")))
           }
         ))
-        /*
-                .withColumn("CreatedOn", current_timestamp())
-                .withColumn("CreatedBy", lit(System.getProperty("user.name"))) // identity of who runs the job
-                .withColumn("EffectiveDate", if (effectiveDate == null) to_date(lit(null)) else to_date(lit(getDateFormatted(effectiveDate, "yyyy-MM-dd"))))
-        */
         .setNullableStateForAllColumns(true)
 
       if (action.getIsMaintainLoadControlAsParquetFile) {
@@ -943,18 +918,6 @@ private[dw] trait SourceDataMerger {
       appLog.info("Running subsequent load for versioned data source with unique keys")
       require(dfStgOldAsOption.isDefined)
       val dfStg = dfStgOldAsOption.get
-
-      /*
-            val dfStg = if (dfOldDataAsOption.isDefined) {
-              dfOldDataAsOption.get
-            } else if (action.getSdaIsFileDestinationParquet) {
-              spark.read.format("org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat")
-                .load(action.getSdaDestinationFilePath)
-            }
-            else
-              throw new RuntimeException("""Loader ERROR: Only Parquet destination is currently supported """)
-      */
-
       dfStg.createOrReplaceTempView("StgData") // This is the existing file that we want to amend to create a new one and replace the existing one with the new
 
       if (action.getIsDebugDwLib) {
@@ -1253,21 +1216,6 @@ private[dw] trait SourceDataMerger {
          |                               AND stg.${metadataCols("RowHash")} != new.${metadataCols("RowHash")}
          |    """.stripMargin
     val dfNewVersions = spark.sql(sqlNewVersions)
-    /*      .withColumns(ListMap( // ListMap preserves the order of columns
-            metadataCols("EffectiveDateStart") -> {
-              val value = to_date(lit(effDateYYYY_MM_DD));
-              when(value.isNotNull, value).otherwise(lit(null))
-            },
-            metadataCols("EffectiveDateEnd") -> {
-              val value = to_date(lit(farFutureDateYYYY_MM_DD)); // This column must be the last one. It will be replaced during versioning process
-              when(value.isNotNull, value).otherwise(lit(null))
-            }
-          ))*/
-
-    /*
-          .withColumn(metadataCols("EffectiveDateStart"), to_date(lit(effDateYYYY_MM_DD)))
-          .withColumn(metadataCols("EffectiveDateEnd"), to_date(lit(farFutureDateYYYY_MM_DD))) // This column must be the last one. It will be replaced during versioning process
-    */
 
     if (action.getIsDebugDwLib) {
       dfNewVersions.show(3)
@@ -1293,7 +1241,6 @@ private[dw] trait SourceDataMerger {
       appLog.info("New versions rows count: " + dfNewVersions.count())
     }
 
-    // if (action.getIsFileDestination) saveNewStgFile(action, dfStgNew, appLog)
     dfStgNew
   }
 

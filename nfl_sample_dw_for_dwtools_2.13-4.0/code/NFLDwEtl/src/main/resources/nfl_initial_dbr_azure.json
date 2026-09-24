@@ -1,21 +1,6 @@
 {
   "isDebug": false,
-  "sparkParams": {
-    "spark.app.name": "Spark NFL DW",
-    "spark.master": "local",
-    "spark.driver.host": "localhost",
-    "spark.driver.maxResultSize": "15g",
-    "spark.driver.memory": "20g",
-    "spark.executor.memory": "20g",
-    "spark.memory.offHeap.enabled": "true",
-    "spark.memory.offHeap.size": "15g",
-    "__ spark.sql.autoBroadcastJoinThreshold works but makes slower": "-1",
-    "__ spark.sql.autoBroadcastJoinThreshold": "-1",
-    "spark.driver.memoryOverhead": "20g",
-    "spark.executor.memoryOverhead": "20g",
-    "__ spark.sql.shuffle.partitions": "2000",
-    "__ spark.buffer.pageSize": "4194304"
-  },
+
   "dwEtl":
   {
     "dwEtlConfigVersion": "2",
@@ -23,7 +8,7 @@
     "isInitialLoad": true,
     "fileEtlLog": {
       "parquet": {},
-      "path": "C:\\dwspark\\nfl_sample_dw_for_dwtools_2.13-4.0\\output_data\\control_files\\etl_log\\"
+      "path": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/control_files/etl_log/"
     },
     "stgSources":
     [
@@ -37,14 +22,14 @@
         "timestampColumn": "_src_RowTimestamp",
         "effectiveDateRule": "DISTINCT",
         "fileSource": {
-          "path": "C:\\dwspark\\nfl_sample_dw_for_dwtools_2.13-4.0\\output_data\\staging\\stg_pbp",
+          "path": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/staging/stg_pbp",
           "parquet": {}
         }
       },
       { "moniker": "Teams",
         "description": "Team names historically",
         "fileSource": {
-          "path": "C:\\dwspark\\nfl_sample_dw_for_dwtools_2.13-4.0\\output_data\\staging\\stg_teams",
+          "path": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/staging/stg_teams",
           "parquet": {}
         }
       }
@@ -55,8 +40,8 @@
       "dimensionNamePattern": "(?<dimName>Dim[A-Z][a-zA-Z0-9]+)",
       "fileDimensionsDestination": {
         "parquet": {},
-        "path": "C:\\dwspark\\nfl_sample_dw_for_dwtools_2.13-4.0\\output_data\\dw\\___",
-        "previousCopyPath": "C:\\dwspark\\nfl_sample_dw_for_dwtools_2.13-4.0\\output_data\\dw_prev\\___"
+        "path": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/dw/___",
+        "previousCopyPath": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/dw_prev/___"
       }
     },
     "dimensions":
@@ -223,8 +208,8 @@
       "factNamePattern": "(?<factName>(Fact|Bridge)[A-Z][a-zA-Z0-9]+)",
       "fileFactsDestination": {
         "parquet": {},
-        "path": "C:\\dwspark\\nfl_sample_dw_for_dwtools_2.13-4.0\\output_data\\dw\\___",
-        "pathWithKeySetters": "C:\\dwspark\\nfl_sample_dw_for_dwtools_2.13-4.0\\output_data\\dw\\___.WithKeySetters"
+        "path": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/dw/___",
+        "pathWithKeySetters": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/dw/___.WithKeySetters"
       }
     },
     "facts":

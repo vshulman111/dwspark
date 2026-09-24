@@ -1,0 +1,112 @@
+{
+
+  "sourceCompare":
+  {
+    "sourceCompareConfigVersion": "1",
+    "compareScenarios":
+    [
+      {
+        "name" : "Compare play-by-play source with dest",
+        "isActive": true,
+        "floatThreshold" : 0.01,
+        "compareResult" :
+        {
+          "file": {
+            "dir": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/compare_result/",
+            "csv": {
+              "mode": "PERMISSIVE",
+              "header": true
+            }
+          },
+          "schema" :
+          [
+              { "colName" : "GameId","isUniqueKey" : true },
+              { "colName" : "Quarter", "isUniqueKey" : true },
+              { "colName" : "Minute", "isUniqueKey" : true },
+              { "colName" : "Second", "isUniqueKey" : true },
+              { "colName" : "OffenseTeam", "isUniqueKey" : true },
+              { "colName" : "DefenseTeam", "isUniqueKey" : true },
+              { "colName" : "Down", "isUniqueKey" : true },
+              { "colName" : "ToGo", "isUniqueKey" : true },
+              { "colName" : "YardLine", "isUniqueKey" : true },
+              { "colName" : "SeriesFirstDown", "isUniqueKey" : true },
+              { "colName" : "NextScore", "isUniqueKey" : true },
+              { "colName" : "Description", "isUniqueKey" : true },
+              { "colName" : "TeamWin", "isUniqueKey" : true },
+              { "colName" : "Yards", "isUniqueKey" : true },
+              { "colName" : "Formation", "isUniqueKey" : true },
+              { "colName" : "PlayType", "isUniqueKey" : true }
+          ]
+        },
+        "leftSource" :
+        {
+          "moniker" : "pbp csv",
+          "file": {
+            "path": "dbfs:/Workspace/Users/vs2@dbtimes.com/source_data.copy/from_nflsavant.com/pbp-2020.csv",
+            "csv": {
+              "mode": "PERMISSIVE",
+              "header": true
+            }
+          },
+          "schema" :
+            [
+              { "colName" : "GameId","colType" : "Integer" },
+              { "colName" : "GameDate", "colType" : "Timestamp" },
+              { "colName" : "Quarter", "colType" : "Integer" },
+              { "colName" : "Minute", "colType" : "Integer" },
+              { "colName" : "Second", "colType" : "Integer" },
+              { "colName" : "OffenseTeam", "colType" : "String" },
+              { "colName" : "DefenseTeam", "colType" : "String" },
+              { "colName" : "Down", "colType" : "Integer" },
+              { "colName" : "ToGo", "colType" : "Integer" },
+              { "colName" : "YardLine", "colType" : "Integer" },
+              { "colName" : "_c10", "colType" : "String" },
+              { "colName" : "SeriesFirstDown", "colType" : "Integer" },
+              { "colName" : "_c12", "colType" : "String" },
+              { "colName" : "NextScore", "colType" : "Integer" },
+              { "colName" : "Description", "colType" : "String" },
+              { "colName" : "TeamWin", "colType" : "String" },
+              { "colName" : "_c16", "colType" : "String" },
+              { "colName" : "_c17", "colType" : "String" },
+              { "colName" : "SeasonYear", "colType" : "Integer" },
+              { "colName" : "Yards", "colType" : "Integer" },
+              { "colName" : "Formation", "colType" : "String" },
+              { "colName" : "PlayType", "colType" : "String" },
+              { "colName" : "IsRush", "colType" : "String" },
+              { "colName" : "IsPass", "colType" : "String" },
+              { "colName" : "IsIncomplete", "colType" : "String" },
+              { "colName" : "IsTouchdown", "colType" : "Integer" },
+              { "colName" : "PassType", "colType" : "String" },
+              { "colName" : "IsSack", "colType" : "String" },
+              { "colName" : "IsChallenge", "colType" : "Integer" },
+              { "colName" : "IsChallengeReversed", "colType" : "String" },
+              { "colName" : "Challenger", "colType" : "Integer" },
+              { "colName" : "IsMeasurement", "colType" : "Integer" },
+              { "colName" : "IsInterception", "colType" : "Integer" },
+              { "colName" : "IsFumble", "colType" : "Integer" },
+              { "colName" : "IsPenalty", "colType" : "Integer" },
+              { "colName" : "IsTwoPointConversion", "colType" : "Integer" },
+              { "colName" : "IsTwoPointConversionSuccessful", "colType" : "Integer" },
+              { "colName" : "RushDirection", "colType" : "String" },
+              { "colName" : "YardLineFixed", "colType" : "Integer" },
+              { "colName" : "YardLineDirection", "colType" : "String" },
+              { "colName" : "IsPenaltyAccepted", "colType" : "String" },
+              { "colName" : "PenaltyTeam", "colType" : "String" },
+              { "colName" : "IsNoPlay", "colType" : "String" },
+              { "colName" : "PenaltyType", "colType" : "String" },
+              { "colName" : "PenaltyYards", "colType" : "String" }
+            ],
+          "subsetQuery": [ "SELECT * FROM ___ " ]
+        },
+        "rightSource": {
+          "moniker": "pbp parquet",
+          "file": {
+            "path": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/staging/stg_pbp",
+            "parquet": {}
+          },
+          "subsetQuery": "SELECT * FROM ___ WHERE SeasonYear = 2020"
+        }
+      }
+    ]
+  }
+}
