@@ -24,8 +24,8 @@ import org.apache.spark.sql.SparkSession
 
 class DimPlayType(dimName: String) extends Dim(dimName) {
 
-  override def loadDim(stgSrcViewWithMonikerName: String): Option[DataFrame] = {
-    val sqlStgSource = if (stgSrcViewWithMonikerName == "PlayByPlay") {
+  override def loadDim(stgSrcView: String): Option[DataFrame] = {
+    val sqlStgSource = if (stgSrcView == "PlayByPlay") {
       """| SELECT DISTINCT
          |   IFNULL( Formation				, '' )      AS Formation,
          |   IFNULL( PlayType			, '' )          AS PlayType,

@@ -1,9 +1,8 @@
 {
+  "$schema": "https://www.dbtimes.com/dwtools_2.13-4.0-1.1.0/dwetl-config-schema.json",
   "isDebug": false,
-
   "dwEtl":
   {
-    "dwEtlConfigVersion": "2",
     "jobType": "LoadDimsFacts",
     "isInitialLoad": true,
     "fileEtlLog": {
@@ -12,13 +11,12 @@
     },
     "stgSources":
     [
-      { "moniker": "PlayByPlay",
+      { "id": "PlayByPlay",
         "description": "Play by play data for all games",
         "applicationSpecific": {
           "transactionName": "play"
         },
         "effectiveDateColumn": "GameDate",
-        "isDefaultForEffectiveDate": true,
         "timestampColumn": "_src_RowTimestamp",
         "effectiveDateRule": "DISTINCT",
         "fileSource": {
@@ -26,7 +24,7 @@
           "parquet": {}
         }
       },
-      { "moniker": "Teams",
+      { "id": "Teams",
         "description": "Team names historically",
         "fileSource": {
           "path": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/staging/stg_teams",
@@ -49,13 +47,13 @@
       {
         "name": "DimDataSource",
         "isLoad": true,
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
         ],
         "schema":
         [
           { "colName": "DataSourceKey","colType": "Long", "isKey": true, "isSurrogateKey": true, "unknownValue": "0" },
-          { "colName": "DataSourceMoniker","colType": "String",  "isNaturalKey": true, "unknownValue": "Unknown" },
+          { "colName": "DataSourceId","colType": "String",  "isNaturalKey": true, "unknownValue": "Unknown" },
           { "colName": "DataSourceDescription","colType": "String", "unknownValue": "Unknown" },
           { "colName": "TransactionName","colType": "String", "unknownValue": "Unknown" }
         ]
@@ -63,7 +61,7 @@
       {
         "name": "DimDate",
         "isLoad": true,
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
           "PlayByPlay"
         ],
@@ -83,7 +81,7 @@
       {
         "name": "DimGame",
         "isLoad": true,
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
           "PlayByPlay",
           "Teams"
@@ -98,7 +96,7 @@
       {
         "name": "DimFieldPosition",
         "isLoad": true,
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
           "PlayByPlay"
         ],
@@ -115,7 +113,7 @@
       {
         "name": "DimPlayType",
         "isLoad": true,
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
           "PlayByPlay"
         ],
@@ -131,7 +129,7 @@
       {
         "name": "DimPlayTime",
         "isLoad": true,
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
           "PlayByPlay"
         ],
@@ -146,7 +144,7 @@
       {
         "name": "DimPlayDetails",
         "isLoad": true,
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
           "PlayByPlay"
         ],
@@ -173,7 +171,7 @@
       {
         "name": "DimTeam",
         "isLoad": true,
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
           "Teams"
         ],
@@ -192,7 +190,7 @@
         "name": "DimTeamRole",
         "__": "This is static dimension. Its population is not needed in incremental load",
         "isLoad": true,
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
         ],
         "schema":
@@ -217,14 +215,14 @@
       { "name": "FactPlays",
         "isLoad": true,
         "processingMode": "REPLACE_PARTITION",
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
           "PlayByPlay"
         ],
         "schema":
         [
           { "colName": "SeasonYear", "colType": "Integer", "isForPartition": true },
-          { "colName": "DataSourceMoniker", "colType": "String", "isForSettingForeignKey": true, "foreignKey": "DataSourceKey", "underlyingDim": "DimDataSource", "underlyingDimCol": "DataSourceMoniker" },
+          { "colName": "DataSourceId", "colType": "String", "isForSettingForeignKey": true, "foreignKey": "DataSourceKey", "underlyingDim": "DimDataSource", "underlyingDimCol": "DataSourceId" },
           { "colName": "GameId", "colType": "String", "isForSettingForeignKey": true, "foreignKey": "GameKey", "underlyingDim": "DimGame", "underlyingDimCol": "GameId" },
           { "colName": "PlayDate", "colType": "Date", "isForSettingForeignKey": true, "isEffDateForTypeTwo": true, "foreignKey": "PlayDateKey", "underlyingDim": "DimDate", "underlyingDimCol": "Date" },
           { "colName": "OffenseTeamAbbrevName", "colType": "String", "isForSettingForeignKey": true, "foreignKey": "OffenseTeamKey", "underlyingDim": "DimTeam", "underlyingDimCol": "HistTeamAbbrevName" },
@@ -267,13 +265,13 @@
       { "name": "BridgeTeamsPlays",
         "isLoad": true,
         "processingMode": "REPLACE",
-        "stgSourcesMonikers":
+        "stgSourceIds":
         [
           "PlayByPlay"
         ],
         "schema":
         [
-          { "colName": "DataSourceMoniker", "colType": "String", "isForSettingForeignKey": true, "foreignKey": "DataSourceKey", "underlyingDim": "DimDataSource", "underlyingDimCol": "DataSourceMoniker" },
+          { "colName": "DataSourceId", "colType": "String", "isForSettingForeignKey": true, "foreignKey": "DataSourceKey", "underlyingDim": "DimDataSource", "underlyingDimCol": "DataSourceId" },
           { "colName": "GameId", "colType": "String", "isForSettingForeignKey": true, "foreignKey": "GameKey", "underlyingDim": "DimGame", "underlyingDimCol": "GameId" },
           { "colName": "PlayDate", "colType": "Date", "isForSettingForeignKey": true, "isEffDateForTypeTwo": true, "foreignKey": "PlayDateKey", "underlyingDim": "DimDate", "underlyingDimCol": "Date" },
           { "colName": "TeamAbbrevName", "colType": "String", "isForSettingForeignKey": true, "foreignKey": "TeamKey", "underlyingDim": "DimTeam", "underlyingDimCol": "HistTeamAbbrevName" },

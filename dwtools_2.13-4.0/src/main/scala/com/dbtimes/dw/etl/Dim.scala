@@ -197,14 +197,14 @@ private[etl] object Dim {
 
     val timeStart = Calendar.getInstance().getTimeInMillis()
     val dim = Dim.getDim(dimName)
-    val stgSrcViewsWithMonikerNames: List[String] = dim.loadStagingSources()
+    val stgSrcViewsWithIdNames: List[String] = dim.loadStagingSources()
     val datesToProcess: List[Date] = dim.getEffectiveDatesToProcess()
 
-    val dfDimAsOption = if (datesToProcess.isEmpty) {
-      dwEtlLog.info(s"-- There are no dates to process dimension $dimName")
+    val dfDimAsOption = if (datesToProcess.isEmpty && !configDwEtl.getIsInitialLoad) {
+      dwEtlLog.info(s"-- There are no dates to process on consecutive load of $dimName dimension")
       None
     } else {
-      dim.etlModelObject(stgSrcViewsWithMonikerNames, datesToProcess)
+      dim.etlModelObject(stgSrcViewsWithIdNames, datesToProcess)
     }
 
     val durationSec = (Calendar.getInstance().getTimeInMillis() - timeStart).toDouble / 1e3 // seconds
@@ -212,7 +212,7 @@ private[etl] object Dim {
     // For the Etl Process record the last effective date from the shared dates to process because that is
     // created from the sources marked for effective date and that's what will be used to get a new
     // dates range for the incremental load
-    ModelObject.createEtlLogRecord(dimName, configDwEtl, configDwEtl.getStgSourceMonikersOfDim(dimName), datesToProcess,
+    ModelObject.createEtlLogRecord(dimName, configDwEtl, configDwEtl.getStgSourceIdsOfDim(dimName), datesToProcess,
       configDwEtl.getIsInitialLoad, if (configDwEtl.getRerunEtlAfter.isDefined) true else false, durationSec)
 
     dfDimAsOption
@@ -337,19 +337,19 @@ abstract class Dim(private val dimName: String)
    *
    * Notes: this is the code snippet to get last loaded timestamp in the loadDim if needed.
    * The second line would convert it to string if needed to be used inside SQL statement
-   * val stgSrcLastLoadedTimestampAsOption = lastProcessedStgSourceTimestamp.getOrElse( stgSrcViewWithMonikerName, None );
+   * val stgSrcLastLoadedTimestampAsOption = lastProcessedStgSourceTimestamp.getOrElse( stgSrcView, None );
    * val stgSrcLastLoadedTimestampAsStringAsOption = if ( stgSrcLastLoadedTimestampAsOption.isDefined ) Some( stgSrcLastLoadedTimestampAsOption.get.toString ) else None;
    */
-  protected def loadDim(stgSrcViewWithMonikerName: String): Option[DataFrame] = None // Override this method to load new data in bulk or for all effective dates
+  protected def loadDim(stgSrcView: String): Option[DataFrame] = None // Override this method to load new data in bulk or for all effective dates
 
-  protected def loadDim(effDateYYYY_MM_DD: String, stgSrcViewWithMonikerName: String): Option[DataFrame] = None // Override this method to load new data one effective dates at a time. Dimensions with type 2 columns can only use this method to load new data
+  protected def loadDim(effDateYYYY_MM_DD: String, stgSrcView: String): Option[DataFrame] = None // Override this method to load new data one effective dates at a time. Dimensions with type 2 columns can only use this method to load new data
 
   // dimExistingTempViewAsOption will be set to None for initial load
   protected def enrichDim(dfSrcDim: DataFrame, dimExistingTempViewAsOption: Option[String]): DataFrame = {
     dfSrcDim
   }
 
-  final override private[etl] def etlModelObject(stgSrcViewsWithMonikerNames: List[String], datesToProcess: List[Date]): Option[DataFrame] = {
+  final override private[etl] def etlModelObject(stgSrcViewsWithIdNames: List[String], datesToProcess: List[Date]): Option[DataFrame] = {
 
     dwEtlLog.info(s"-- Processing dimension $dimName for following ${datesToProcess.size} dates: ${datesToProcess.mkString(",")}")
 
@@ -357,7 +357,7 @@ abstract class Dim(private val dimName: String)
     if (!dimColsInclEtlOnes.isEmpty) throw new IllegalStateException("dimColsInclEtlOnes Already initialized")
     dimColsInclEtlOnes = dfDim.schema.fieldNames
 
-    preProcess(stgSrcViewsWithMonikerNames, datesToProcess)
+    preProcess(stgSrcViewsWithIdNames, datesToProcess)
 
     if (isDebugDwLib) {
       dfDim.printSchema()
@@ -377,7 +377,7 @@ abstract class Dim(private val dimName: String)
     // Delete all effective dates after the earliest effective date. Will be used on re-runs
     // Only do it for type two dimension. For other, we do not care if we have some unreferenced dimension members
     // This also means that type two dimension will reload the previously loaded source on loading a new source for the same day
-    val dfRemovedFutureEffectiveDates = if (!isInitialLoad && hasTypeTwoCols && lastStartDate.compareTo(datesToProcess.head) >= 0) {
+    val dfRemovedFutureEffectiveDates = if (!isInitialLoad && hasTypeTwoCols && datesToProcess.nonEmpty && lastStartDate.compareTo(datesToProcess.head) >= 0) {
       removeCurrentAndFutureEffectiveDates(dfDim, datesToProcess.head)
     } else {
       dfDim
@@ -391,9 +391,9 @@ abstract class Dim(private val dimName: String)
 
     // Try to load dimension for all effective dates at once
     // Effective date is not passed, will try to load for all effective dates
-    val dfDimForAllEffectiveDatesAtOnceAsOption = doLoadForAllSources(stgSrcViewsWithMonikerNames)
+    val dfDimForAllEffectiveDatesAtOnceAsOption = doLoadForAllSources(stgSrcViewsWithIdNames)
 
-    val dfDimForAllEffectiveDatesOneAtATimeAsOption = if (!dfDimForAllEffectiveDatesAtOnceAsOption.isDefined) {
+    val dfDimForAllEffectiveDatesOneAtATimeAsOption = if (!dfDimForAllEffectiveDatesAtOnceAsOption.isDefined && datesToProcess.nonEmpty) {
       // The value of this Option can be None if none of the sources were used to extract dimension
       // This can happen, for example, when the source is loaded only when changed and none of the sources changed
       // on subsequent load
@@ -414,7 +414,7 @@ abstract class Dim(private val dimName: String)
           val (effDate, _) = curr
           (
             effDate, {
-            val dfDimForEffectiveDateAsOption = doLoadForAllSources(stgSrcViewsWithMonikerNames, getDateFormatted(effDate, "yyyy-MM-dd"))
+            val dfDimForEffectiveDateAsOption = doLoadForAllSources(stgSrcViewsWithIdNames, getDateFormatted(effDate, "yyyy-MM-dd"))
 
             if (dfDimSoFarAsOption.isDefined && dfDimForEffectiveDateAsOption.isDefined) {
               Some(dfDimSoFarAsOption.get.union(dfDimForEffectiveDateAsOption.get))
@@ -432,27 +432,6 @@ abstract class Dim(private val dimName: String)
           )
         }
         )
-
-      /*
-            val dfDimForEachEffectiveDateAsOption = for (effDate <- datesToProcess;
-                                                         dfDimForEffectiveDateAsOption = doLoadForAllSources(stgSrcViewsWithMonikerNames, getDateFormatted(effDate, "yyyy-MM-dd")) // effDate.toString
-                                                         ) yield dfDimForEffectiveDateAsOption
-            // merge all dataframes into one for all effective dates
-            val dfDimForAllEffectiveDatesAsOption = dfDimForEachEffectiveDateAsOption.reduceLeft((df1AsOption, df2AsOption) =>
-              if (df1AsOption.isDefined && df2AsOption.isDefined) {
-                Some(df1AsOption.get.union(df2AsOption.get))
-              }
-              else if (df1AsOption.isDefined && !df2AsOption.isDefined) {
-                df1AsOption
-              }
-              else if (!df1AsOption.isDefined && df2AsOption.isDefined) {
-                df2AsOption
-              }
-              else { // empty data frame
-                None
-              }
-            )
-      */
 
       dfDimForAllEffectiveDatesAsOption
     }
@@ -494,7 +473,7 @@ abstract class Dim(private val dimName: String)
       }
 
       // Post process and save dimension
-      val dfDimPostProcessed = postProcess(stgSrcViewsWithMonikerNames, datesToProcess, dfDimResult)
+      val dfDimPostProcessed = postProcess(stgSrcViewsWithIdNames, datesToProcess, dfDimResult)
       saveDim(dfDimPostProcessed)
       Some(dfDimPostProcessed)
     }
@@ -1252,28 +1231,28 @@ abstract class Dim(private val dimName: String)
   /**
    *
    * @return - if empty dataset is returned it means that the derived class most likely did not override
-   *         def loadDim( stgSrcViewWithMonikerName: String ): DataFrame = empty
+   *         def loadDim( stgSrcView: String ): DataFrame = empty
    *
    *         this means that the derived dimension did not override loadDim without effective date.
    *         That will trigger the call to the loadDim with effective date
-   *         if the dimension did not also override loadDim( effDateYYYY_MM_DD, stgSrcViewWithMonikerName )
+   *         if the dimension did not also override loadDim( effDateYYYY_MM_DD, stgSrcView )
    *         it will result in exception later on
    */
   private def doLoadForAllSources(
-      stgSrcViewsWithMonikerNames: List[String],
+      stgSrcViewsWithIdNames: List[String],
       effDateYYYY_MM_DD: String = null): Option[DataFrame] = {
 
     // loop though all sources to load the dimension and merge data from each source into a single result
     // Sources earlier in the list have precedence over the ones later in the list
     val dfDimsFromAllSourcesAsOption = for (
-      stgSrcViewWithMonikerName <- if (stgSrcViewsWithMonikerNames.isEmpty) List(ModelObject.viewNameForNonExistentDataSource) else stgSrcViewsWithMonikerNames;
-      dfSrcDimAsOption = if (effDateYYYY_MM_DD == null) loadDim(stgSrcViewWithMonikerName) else loadDim(effDateYYYY_MM_DD, stgSrcViewWithMonikerName);
+      stgSrcView <- if (stgSrcViewsWithIdNames.isEmpty) List(ModelObject.viewNameForNonExistentDataSource) else stgSrcViewsWithIdNames;
+      dfSrcDimAsOption = if (effDateYYYY_MM_DD == null) loadDim(stgSrcView) else loadDim(effDateYYYY_MM_DD, stgSrcView);
       dfSrcDimWithEtlColsAsOption = if (dfSrcDimAsOption.isDefined) {
         val dfSrcDim = dfSrcDimAsOption.get
         val dfSrcDimWithEtlCols = {
 
           // This will throw an exception if there are duplicates
-          checkLoadResultForDuplicateColumns( dfSrcDim, stgSrcViewWithMonikerName)
+          checkLoadResultForDuplicateColumns( dfSrcDim, stgSrcView)
 
           val dimensionHasSurrogateKey = configDwEtl.getIsDimensionKeySurrogate(dimName)
 
@@ -1287,13 +1266,13 @@ abstract class Dim(private val dimName: String)
               (dimSchema, true)
             }
 
-          checkForMismatchedFieldNamesInActualAndExpectedSchemas( dfSrcDim, stgSrcViewWithMonikerName, expectedSchema, expectedSchemaHasDimensionKeyColumn )
+          checkForMismatchedFieldNamesInActualAndExpectedSchemas( dfSrcDim, stgSrcView, expectedSchema, expectedSchemaHasDimensionKeyColumn )
 
           // At this point the number of columns is correct and the names match the ones in the configuration.
           // The fields may still be in incorrect order.
           // Before arranging columns in correct order make sure that the types in the source result are compatible with types in the schema
           // Make sure that the fields in the result match expected types
-          checkFieldsWithSameNamesForTypeCompatibility(dfSrcDim, expectedSchema, stgSrcViewWithMonikerName )
+          checkFieldsWithSameNamesForTypeCompatibility(dfSrcDim, expectedSchema, stgSrcView )
 
           // At this point the columns names match and types match or compatible the ones in the configuration.
           // Add dimension key if needed
@@ -1313,7 +1292,7 @@ abstract class Dim(private val dimName: String)
           }
 
           // Confirm that dimension has all columns including the key
-          checkForMismatchedFieldNamesInActualAndExpectedSchemas( dfSrcDimWithSurrogateKeyNull, stgSrcViewWithMonikerName, dimSchema, true )
+          checkForMismatchedFieldNamesInActualAndExpectedSchemas( dfSrcDimWithSurrogateKeyNull, stgSrcView, dimSchema, true )
 
           if (isDebugDwLib) {
             dfSrcDimWithSurrogateKeyNull.printSchema()
@@ -1321,7 +1300,7 @@ abstract class Dim(private val dimName: String)
 
           val dfWithEtlCols = addEtlColumns(
             dfSrcDimWithSurrogateKeyNull.selectInCorrectOrderCastToCorrectTypeAndMakeNullable( dimSchema ), // at this point the dataframe will have all columns incl. the key
-            stgSrcViewWithMonikerName,
+            stgSrcView,
             effDateYYYY_MM_DD)
 
           // Remove a row, if exists, where natural key(s) are same as for Unknown row. It is already part of a dimension.
@@ -1388,11 +1367,11 @@ abstract class Dim(private val dimName: String)
   }
 
 /*
-  private def createErrorMessageForMismatchedFieldsInActualAndExpectedSchemas(stgSrcViewWithMonikerName: String, actualSchema: StructType, expectedSchema: StructType, expectedSchemaHasDimensionKeyColumn: Boolean): String = {
+  private def createErrorMessageForMismatchedFieldsInActualAndExpectedSchemas(stgSrcView: String, actualSchema: StructType, expectedSchema: StructType, expectedSchemaHasDimensionKeyColumn: Boolean): String = {
     val baseErrorMessage = if (expectedSchema.length == actualSchema.length)
       s"""Etl Runner ERROR: The following discrepancies in column names for \"$dimName\" dimension may be the reason for the error: """
     else
-      s"""Etl Runner ERROR: Data for \"$dimName\" dimension ${if (stgSrcViewWithMonikerName == ModelObject.viewNameForNonExistentDataSource) "" else "from \"" + stgSrcViewWithMonikerName + "\" source "}has incorrect number of columns - expected ${expectedSchema.length} ${if (!expectedSchemaHasDimensionKeyColumn) "(that excludes surrogate key which must not be included in the load result) " else ""}vs. actual ${actualSchema.length} """
+      s"""Etl Runner ERROR: Data for \"$dimName\" dimension ${if (stgSrcView == ModelObject.viewNameForNonExistentDataSource) "" else "from \"" + stgSrcView + "\" source "}has incorrect number of columns - expected ${expectedSchema.length} ${if (!expectedSchemaHasDimensionKeyColumn) "(that excludes surrogate key which must not be included in the load result) " else ""}vs. actual ${actualSchema.length} """
 
     // if there is at least one field with the same name, assume the intention is to have matching names and in that case determine fields missing from either schema
     val commonFields = actualSchema.names.intersect(expectedSchema.names)

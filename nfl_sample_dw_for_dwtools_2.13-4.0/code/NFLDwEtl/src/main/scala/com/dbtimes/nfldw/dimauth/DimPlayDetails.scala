@@ -24,8 +24,8 @@ import org.apache.spark.sql.SparkSession
 
 class DimPlayDetails(dimName: String) extends Dim(dimName) {
 
-  override def loadDim(stgSrcViewWithMonikerName: String): Option[DataFrame] = {
-    val sqlStgSource = if (stgSrcViewWithMonikerName == "PlayByPlay") {
+  override def loadDim(stgSrcView: String): Option[DataFrame] = {
+    val sqlStgSource = if (stgSrcView == "PlayByPlay") {
       """|SELECT DISTINCT
          |	 IFNULL( CASE IsRush								          WHEN '0' THEN 'N' WHEN '1' THEN 'Y' ELSE CAST( IsRush AS STRING )								           END , '' )	AS IsRush							  ,
          |	 IFNULL( CASE IsPass								          WHEN '0' THEN 'N' WHEN '1' THEN 'Y' ELSE CAST( IsPass AS STRING )								           END , '' )	AS IsPass							  ,

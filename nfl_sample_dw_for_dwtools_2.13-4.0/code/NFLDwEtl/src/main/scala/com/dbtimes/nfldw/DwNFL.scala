@@ -43,7 +43,7 @@ object DwNFL  extends LazyLogging {
   val teamRolePenalty = "Penalty"
   val teamRoleTimeout = "Timeout"
 
-  private var stgSourcesMonikerDescriptionTransactionName: List[(String, String, String)] = List.empty
+  private var stgSourcesIdDescriptionTransactionName: List[(String, String, String)] = List.empty
   private var isDebug: Boolean = false
   val etlLogger = logger
 
@@ -70,7 +70,7 @@ object DwNFL  extends LazyLogging {
   }
 
   def getIsDebug: Boolean = isDebug
-  def getStgSourcesMonikerDescriptionTransactionName: List[(String, String, String)] = stgSourcesMonikerDescriptionTransactionName
+  def getStgSourcesIdDescriptionTransactionName: List[(String, String, String)] = stgSourcesIdDescriptionTransactionName
 
   private def configureSparkSession(appConfig: Config): SparkSession.Builder = {
     val sparkConfig = Utils.getConfigObjectFields( if ( appConfig.hasPath("sparkParams" ) ) Some( appConfig.getConfig("sparkParams") ) else None )
@@ -85,9 +85,9 @@ object DwNFL  extends LazyLogging {
     spark.udf.register("udfSeasonYear", DwNFL.getSeasonYear)
 
     val stgSources = appConfig.getConfigList("dwEtl.stgSources").asScala.toList
-    stgSourcesMonikerDescriptionTransactionName = stgSources map {
+    stgSourcesIdDescriptionTransactionName = stgSources map {
       case source: Config => {
-        (source.getString("moniker"),
+        (source.getString("id"),
           if (source.hasPath("description")) source.getString("description") else "",
           if (source.hasPath("applicationSpecific.transactionName")) source.getString("applicationSpecific.transactionName") else "")
       }

@@ -1,8 +1,7 @@
 {
-
+  "$schema": "https://www.dbtimes.com/dwtools_2.13-4.0-1.1.0/sourcecomparer-config-schema.json",
   "sourceCompare":
   {
-    "sourceCompareConfigVersion": "1",
     "compareScenarios":
     [
       {
@@ -40,7 +39,7 @@
         },
         "leftSource" :
         {
-          "moniker" : "pbp csv",
+          "label" : "pbp csv",
           "file": {
             "path": "dbfs:/Workspace/Users/vs2@dbtimes.com/source_data.copy/from_nflsavant.com/pbp-2020.csv",
             "csv": {
@@ -99,7 +98,7 @@
           "subsetQuery": [ "SELECT * FROM ___ " ]
         },
         "rightSource": {
-          "moniker": "pbp parquet",
+          "label": "pbp parquet",
           "file": {
             "path": "dbfs:/Workspace/Users/vs2@dbtimes.com/output_data/staging/stg_pbp",
             "parquet": {}

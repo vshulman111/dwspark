@@ -29,7 +29,7 @@ import org.apache.spark.sql.SparkSession
  */
 class DimDate(dimName: String) extends Dim(dimName) {
 
-/*  override def loadDim(stgSrcViewWithMonikerName: String): Option[DataFrame] = {
+/*  override def loadDim(stgSrcView: String): Option[DataFrame] = {
     val sqlStgSource
     =
       s"""| SELECT
@@ -54,7 +54,7 @@ class DimDate(dimName: String) extends Dim(dimName) {
     Some(dfStgSource)
   }*/
 
-  override def loadDim(effDateYYYY_MM_DD: String, stgSrcViewWithMonikerName: String): Option[DataFrame] = {
+  override def loadDim(effDateYYYY_MM_DD: String, stgSrcView: String): Option[DataFrame] = {
 
     val sqlStgSource
     =

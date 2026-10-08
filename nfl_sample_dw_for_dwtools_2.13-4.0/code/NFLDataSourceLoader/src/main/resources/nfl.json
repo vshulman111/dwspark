@@ -1,4 +1,5 @@
 {
+  "$schema": "https://www.dbtimes.com/dwtools_2.13-4.0-1.1.0/sourceloader-config-schema.json",
   "sparkParams":
   {
     "spark.app.name": "NFL Data Source Loader",
@@ -8,7 +9,6 @@
   },
   "sourceLoad":
   {
-    "sourceLoadConfigVersion": "2",
     "loadActions":
     [
       {
@@ -121,7 +121,7 @@
         "schema" :
         [
           { "colName" : "GameId","colType" : "Integer" },
-          { "colName" : "GameDate", "colType" : "Timestamp" },
+          { "colName" : "GameDate", "colType" : "Date" },
           { "colName" : "Quarter", "colType" : "Integer" },
           { "colName" : "Minute", "colType" : "Integer" },
           { "colName" : "Second", "colType" : "Integer" },

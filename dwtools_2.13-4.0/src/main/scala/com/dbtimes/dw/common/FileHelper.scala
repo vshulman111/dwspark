@@ -28,7 +28,7 @@ import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.commons.io.FilenameUtils
 import org.apache.spark.storage.StorageLevel
 
-private [dw] object FileHelper {
+private[dw] object FileHelper {
   /**
    *
    * @param directory
@@ -83,7 +83,7 @@ private [dw] object FileHelper {
     val sourceDirWithNoLastSeparator = if (sourceDir.takeRight(1) == fileSeparator) sourceDir.substring(0, sourceDir.length - 1) else sourceDir
     val destDirWithNoLastSeparator = if (destDir.takeRight(1) == fileSeparator) destDir.substring(0, destDir.length - 1) else destDir
 
-    val filesInSourceDirectory = FileHelper.getFilesInDirectory(sourceDirWithNoLastSeparator, isRecursive = false, isGetFilesOnly= true, isGetDirectoriesOnly = false, filterExpression)
+    val filesInSourceDirectory = FileHelper.getFilesInDirectory(sourceDirWithNoLastSeparator, isRecursive = false, isGetFilesOnly = true, isGetDirectoriesOnly = false, filterExpression)
 
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
     val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
@@ -102,7 +102,7 @@ private [dw] object FileHelper {
    * @param sourceDir
    * @param destDir
    */
-  private [dw] def moveDirectory(sourceDir: String, destDir: String): Unit = {
+  private[dw] def moveDirectory(sourceDir: String, destDir: String): Unit = {
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
     val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
 
@@ -122,7 +122,7 @@ private [dw] object FileHelper {
     fs.exists(new HadoopPath(dirOrFile))
   }
 
-  private [dw] def deleteDirectoryOrFileIfExists(dirOrFile: String): Unit = {
+  private[dw] def deleteDirectoryOrFileIfExists(dirOrFile: String): Unit = {
 
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
     val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
@@ -150,7 +150,7 @@ private [dw] object FileHelper {
       false
   }
 
-  private [dw] def saveDataFrameAsParquet(
+  private[dw] def saveDataFrameAsParquet(
       df: DataFrame,
       filePath: String,
       filePathPrevVersion: String = null,
@@ -190,7 +190,7 @@ private [dw] object FileHelper {
       new HadoopPath(filePath))
   }
 
-  private [dw] def saveDataFrameAddToExisting(
+  private[dw] def saveDataFrameAddToExisting(
       df: DataFrame,
       filePath: String,
       filePathPrevVersion: String = null,
@@ -263,7 +263,7 @@ private [dw] object FileHelper {
 
   }
 
-  private [dw] def saveDataFrameAsParquetReplacePartitions(
+  private[dw] def saveDataFrameAsParquetReplacePartitions(
       df: DataFrame,
       filePath: String,
       filePathPrevVersion: String = null,
@@ -314,7 +314,7 @@ private [dw] object FileHelper {
     FileHelper.deleteDirectoryOrFileIfExists(filePath + uniqueId)
   }
 
-  private [dw] def saveDataFrameAsParquetAndMoveToParentDir(
+  private[dw] def saveDataFrameAsParquetAndMoveToParentDir(
       df: DataFrame,
       fileNamePrefix: String,
       fileDir: String): Unit = {
@@ -339,7 +339,7 @@ private [dw] object FileHelper {
     fs.delete(new HadoopPath(FileHelper.makePath(fileDir, fileName)), true)
   }
 
-  private [dw] def removePathEndingSeparator(dirName: String): String = {
+  private[dw] def removePathEndingSeparator(dirName: String): String = {
     val fileSeparator = FileSystems.getDefault().getSeparator()
     if (dirName.endsWith(fileSeparator)) dirName.dropRight(fileSeparator.length) else dirName
   }
@@ -353,7 +353,7 @@ private [dw] object FileHelper {
     dirNameWithoutEndingSeparator + fileSeparator + FileHelper.removePathEndingSeparator(fileNameWithoutLeadingSeparator)
   }
 
-  private [dw] def sanitizeFileName(fileName: String): String =
+  private[dw] def sanitizeFileName(fileName: String): String =
     fileName.replaceAll("[\\?+=\\\\/\\<\\>\\[\\] ]", "_")
       .replace(' ', '_')
       .replace('?', '_')
@@ -364,7 +364,7 @@ private [dw] object FileHelper {
    * @param destFilePath
    * @param srcDirectories
    */
-  private [dw] def concatCsvFiles(destFilePath: String, srcDirectories: List[String]): Unit = {
+  private[dw] def concatCsvFiles(destFilePath: String, srcDirectories: List[String]): Unit = {
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
 
     val fileLists = for (srcDirectory <- srcDirectories;
@@ -402,38 +402,48 @@ private [dw] object FileHelper {
       false
   }
 
-  private[dw] def createFileNameWithCurrentTimestamp(filePathDest: String, sourceFilePathOrUrl: String, defaultFileName: String, defaultFileExtension: String = ""): String = {
-    val ( fileNameInUrlWithoutExtension, fileExtension ) =
+  private[dw] def createFileNameWithCurrentTimestamp(filePathDest: String, sourceFilePathOrUrl: String, defaultFileName: String, defaultFileExtension: String = "", timestampAsPrefix: Boolean = false): String = {
+    val (fileNameInUrlWithoutExtension, fileExtension) =
       try {
         val fileNameWithExtension = sourceFilePathOrUrl.split(Array('/', '\\'))
           .last
         val fileNameAndExtension = fileNameWithExtension.split('.')
 
-        if ( fileNameAndExtension.length > 1 )
-          ( fileNameAndExtension.dropRight(1).mkString( "." ), fileNameAndExtension.last )
+        if (fileNameAndExtension.length > 1)
+          (fileNameAndExtension.dropRight(1).mkString("."), fileNameAndExtension.last)
         else
-          ( fileNameAndExtension.head, defaultFileExtension )
+          (fileNameAndExtension.head, defaultFileExtension)
       }
       catch {
-        case e: Exception => ( defaultFileName, defaultFileExtension )
+        case e: Exception => (defaultFileName, defaultFileExtension)
       }
 
     val fileName = FileHelper.makePath(filePathDest,
-      FileHelper.sanitizeFileName(fileNameInUrlWithoutExtension
-        + "_"
-        + new SimpleDateFormat("yyyyMMdd_hhmmss").format(Calendar.getInstance().getTime())
-        + ( if( fileExtension.nonEmpty ) "." + fileExtension else fileExtension ) )
+      FileHelper.sanitizeFileName(
+        (if (timestampAsPrefix) {
+          new SimpleDateFormat("yyyyMMdd_hhmmss").format(Calendar.getInstance().getTime()) + "_"
+        }
+        else
+          "" )
+          + fileNameInUrlWithoutExtension
+          + ( if (!timestampAsPrefix) {
+          "_" + new SimpleDateFormat("yyyyMMdd_hhmmss").format(Calendar.getInstance().getTime())
+        }
+        else
+          "")
+          + (if (fileExtension.nonEmpty) "." + fileExtension else fileExtension))
     )
 
     fileName
   }
+
   /**
    *
    * @param csvFileName - this file may or may not have an extension
    * @param df
    * @return
    */
-  private [dw] def saveDataFrameAsCsv(csvFileName: String, df: DataFrame): String = {
+  private[dw] def saveDataFrameAsCsv(csvFileName: String, df: DataFrame): String = {
 
     val csvFilePathWithoutExtension = if (csvFileName.endsWith(".csv")) csvFileName.dropRight(".csv".length) else csvFileName
 
@@ -450,7 +460,7 @@ private [dw] object FileHelper {
       .write.format("com.databricks.spark.csv")
       .option("header", true)
       .option("escape", "\"")
-      .option("multiline", true )
+      .option("multiline", true)
       .mode("overwrite")
       .csv(resultFileDataDir)
 
@@ -460,7 +470,7 @@ private [dw] object FileHelper {
     resultFileName
   }
 
-  private [dw] def saveStringToNewFile(
+  private[dw] def saveStringToNewFile(
       fileText: String,
       fileNamePrefix: String,
       fileDir: String,

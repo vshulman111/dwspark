@@ -6,7 +6,7 @@
 
     <groupId>com.dbtimes</groupId>
     <artifactId>dwtools_2.13-4.0</artifactId>
-    <version>1.0.3</version>
+    <version>1.1.0</version>
 
 	<name>Data Warehouse Tools For Spark</name>
 	<description>dwtools used to implement Data Warehouse that follows Kimball Dimensional modeling approach on Spark</description>
@@ -45,7 +45,9 @@
         <scala.version.minor>17</scala.version.minor>
         <scala.version>${scala.version.major}.${scala.version.minor}</scala.version>
 		<maven.compiler.release>17</maven.compiler.release>
-    </properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+	</properties>
 
     <dependencies>
         <dependency>

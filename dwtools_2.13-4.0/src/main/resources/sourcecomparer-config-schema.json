@@ -1,10 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Source Comparer Configuration v1",
+  "title": "Source Comparer Configuration",
   "description": "Defines required fields for the application that uses DW Source Comparer library.  The application configuration can have other root level fields.",
   "type": "object",
   "$defs": {
     "jdbcOptions": {
+      "title":  "JDBC Options",
       "description": "These options are applicable to all JDBC databases - currently sql server and oracle. See https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html for details.",
       "type": "object",
       "properties": {
@@ -115,6 +116,7 @@
       "unevaluatedProperties": false
     },
     "compareSource": {
+      "title":  "Compare source",
       "description": "This definition is used for both - left and right - compare sources",
       "type": "object",
       "oneOf": [
@@ -336,9 +338,9 @@
         }
       ],
       "properties": {
-        "moniker": {
+        "label": {
           "type": "string",
-          "description": "A meaningful name of the source to show in compare results. If none defined – the default is “left” or “right”"
+          "description": "Used to identify a source compare results. If none defined – the default is “left” for the first source and “right” for the second one"
         },
         "schema": {
           "type": "array",
@@ -417,7 +419,7 @@
         "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
       },
       "required": [
-        "moniker"
+        "label"
       ],
       "unevaluatedProperties": false
     }
@@ -427,11 +429,6 @@
       "type": "object",
       "description": "Configuration for source compare",
       "properties": {
-        "sourceCompareConfigVersion": {
-          "type": "string",
-          "description": "Version of a Source Comparer json configuration",
-          "const": "1"
-        },
         "compareScenarios": {
           "type": "array",
           "description": "Specifications for comparing sources",
@@ -613,7 +610,6 @@
         "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
       },
       "required": [
-        "sourceCompareConfigVersion",
         "compareScenarios"
       ],
       "unevaluatedProperties": false

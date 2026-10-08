@@ -40,9 +40,9 @@ private[sourcecomparer] class ScenarioConfig(val scenarioConfig: ConfigValue) ex
   private[sourcecomparer] def validate: Seq[String] = {
     var errors: mutable.Seq[String] = mutable.Seq.empty[String]
 
-      // Check: scenario must have different left and right monikers
-    if (getMoniker(true) == getMoniker(false))
-      errors = errors :+ s"""Scenario "$getName" has the same moniker for left and right sources. The monikers must be different."""
+      // Check: scenario must have different left and right labels
+    if (getLabel(true) == getLabel(false))
+      errors = errors :+ s"""Scenario "$getName" has the same label for left and right sources. The labels must be different."""
 
     errors.toSeq
   }
@@ -162,9 +162,9 @@ private[sourcecomparer] class ScenarioConfig(val scenarioConfig: ConfigValue) ex
   private[sourcecomparer] def getSchema(isLeftSource: Boolean): StructType =
     super.getSchema(scenario,s"scenario.${getLeftOrRight(isLeftSource)}Source.schema" )
 
-  private[sourcecomparer] def getMoniker(isLeftSource: Boolean): String = {
-    if ( scenario.hasPath(s"scenario.${getLeftOrRight(isLeftSource)}Source.moniker"))
-      scenario.getString(s"scenario.${getLeftOrRight(isLeftSource)}Source.moniker")
+  private[sourcecomparer] def getLabel(isLeftSource: Boolean): String = {
+    if ( scenario.hasPath(s"scenario.${getLeftOrRight(isLeftSource)}Source.label"))
+      scenario.getString(s"scenario.${getLeftOrRight(isLeftSource)}Source.label")
     else
       getLeftOrRight(isLeftSource)  // default left or right
   }

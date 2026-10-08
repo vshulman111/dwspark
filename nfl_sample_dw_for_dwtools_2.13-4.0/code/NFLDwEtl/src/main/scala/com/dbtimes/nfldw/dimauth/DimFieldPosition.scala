@@ -25,15 +25,15 @@ import org.apache.spark.sql.SparkSession
 
 class DimFieldPosition(dimName: String) extends Dim(dimName) {
 
-  override def loadDim(stgSrcViewWithMonikerName: String): Option[DataFrame] = {
-    val sqlStgSource = if (stgSrcViewWithMonikerName == "PlayByPlay") {
+  override def loadDim(stgSrcView: String): Option[DataFrame] = {
+    val sqlStgSource = if (stgSrcView == "PlayByPlay") {
       s"""| SELECT DISTINCT
          |   IFNULL( CAST( Down				        AS STRING ), '' )			 AS Down,
          |   IFNULL( CAST( YardLine			      AS STRING ), '' )		   AS YardLine,
          |   IFNULL( CAST( RushDirection		  AS STRING ), '' )	     AS RushDirection,
          |   IFNULL( CAST( YardLineFixed		  AS STRING ), '' )	     AS YardLineFixed,
          |   IFNULL( CAST( YardLineDirection	AS STRING ), '' )      AS YardLineDirection
-         | FROM $stgSrcViewWithMonikerName """.stripMargin
+         | FROM $stgSrcView """.stripMargin
     }
     else
       throw new RuntimeException(s"""Dim Etl ERROR: Unknown stg source while loading dimension $dimName""")

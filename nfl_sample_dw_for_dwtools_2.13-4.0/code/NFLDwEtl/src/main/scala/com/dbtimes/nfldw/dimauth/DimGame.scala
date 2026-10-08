@@ -24,8 +24,8 @@ import org.apache.spark.sql.SparkSession
 
 class DimGame(dimName: String) extends Dim(dimName) {
 
-  override def loadDim(stgSrcViewWithMonikerName: String): Option[DataFrame] = {
-    val dfStgSourceAsOption = if (stgSrcViewWithMonikerName == "PlayByPlay") {
+  override def loadDim(stgSrcView: String): Option[DataFrame] = {
+    val dfStgSourceAsOption = if (stgSrcView == "PlayByPlay") {
       val sqlPlayByPlay =
         """
           | SELECT
@@ -39,7 +39,7 @@ class DimGame(dimName: String) extends Dim(dimName) {
       val spark = SparkSession.builder().getOrCreate()
       Some(spark.sql(sqlPlayByPlay))
     }
-    else if (stgSrcViewWithMonikerName == "Teams") {
+    else if (stgSrcView == "Teams") {
       None // Do not need to process this source
     }
     else

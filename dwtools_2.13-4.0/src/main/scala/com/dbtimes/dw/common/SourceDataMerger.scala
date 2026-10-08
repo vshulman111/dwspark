@@ -999,11 +999,24 @@ private[dw] trait SourceDataMerger {
     dfStg.createOrReplaceTempView("StgData") // This is the existing file that we want to amend to create a new one and replace the existing one with the new
 
     val mergeKeys = action.getMergeKeysList
-    dfAllMergeKeys
+    val dfAllMergeKeysWithRowMergeKeyColumn = dfAllMergeKeys
       // even though mergeKeys cannot be emty here add the code that will create nullable column
       .withColumn(metadataCols("RowMergeKey"), if (mergeKeys.isEmpty) lit(null).cast(StringType) else concatColumns(struct(mergeKeys.head, mergeKeys.tail: _*)))
       // concatColumns(struct(mergeKeys.head, mergeKeys.tail: _*)))
-      .createOrReplaceTempView("AllMergeKeys")
+
+    dfAllMergeKeysWithRowMergeKeyColumn.createOrReplaceTempView("AllMergeKeys")
+
+    if (action.getIsDebugDwLib) {
+      dfAllMergeKeysWithRowMergeKeyColumn.show( 100 )
+      dfAllMergeKeysWithRowMergeKeyColumn.printSchema()
+
+      dfStg.show( 50 )
+      dfStg.printSchema()
+
+      dfNewData.show( 50 )
+      dfNewData.printSchema()
+    }
+
 
 
     // Step 1. Create un-changed data

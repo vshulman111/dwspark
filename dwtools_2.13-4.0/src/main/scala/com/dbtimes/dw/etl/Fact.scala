@@ -64,7 +64,7 @@ private[etl] object Fact {
 
     val timeStart = Calendar.getInstance().getTimeInMillis()
     val fact = Fact.getFact(factName)
-    val stgSrcViewsWithMonikerNames: List[String] = fact.loadStagingSources()
+    val stgSrcViewsWithIdNames: List[String] = fact.loadStagingSources()
     val datesToProcess: List[Date] = fact.getEffectiveDatesToProcess()
 
     if (datesToProcess.isEmpty) {
@@ -72,14 +72,14 @@ private[etl] object Fact {
     }
     else {
       fact.loadDimensions(mapDimNameDf)
-      fact.etlModelObject(stgSrcViewsWithMonikerNames, datesToProcess)
+      fact.etlModelObject(stgSrcViewsWithIdNames, datesToProcess)
     }
     val durationSec = (Calendar.getInstance().getTimeInMillis() - timeStart).toDouble / 1e3 // seconds
 
     // For the Etl Process record the last effective date from the shared dates to process because that is
     // created from the sources marked for effective date and that's what will be used to get a new
     // dates range for the incremental load
-    ModelObject.createEtlLogRecord(factName, configDwEtl, configDwEtl.getStgSourceMonikersOfFact(factName), datesToProcess,
+    ModelObject.createEtlLogRecord(factName, configDwEtl, configDwEtl.getStgSourceIdsOfFact(factName), datesToProcess,
       configDwEtl.getIsInitialLoad, if (configDwEtl.getRerunEtlAfter.isDefined) true else false, durationSec)
   }
 
@@ -100,15 +100,15 @@ abstract class Fact(private val factName: String)
   /** Overridable methods
    * Notes: this is the code snippet to get last loaded timestamp in the loadDim if needed.
    * The second line would convert it to string if needed to be used inside SQL statement
-   * val stgSrcLastLoadedTimestampAsOption = lastProcessedStgSourceTimestamp.getOrElse( stgSrcViewWithMonikerName, None );
+   * val stgSrcLastLoadedTimestampAsOption = lastProcessedStgSourceTimestamp.getOrElse( stgSrcView, None );
    * val stgSrcLastLoadedTimestampAsStringAsOption = if ( stgSrcLastLoadedTimestampAsOption.isDefined ) Some( stgSrcLastLoadedTimestampAsOption.get.toString ) else None;
    */
-  protected def loadFact(stgSrcViewWithMonikerName: String): Option[DataFrame] = None // Override this method to load new data in bulk or for all effective dates. In this override, you would normally join to dates view to generate effective date value
+  protected def loadFact(stgSrcView: String): Option[DataFrame] = None // Override this method to load new data in bulk or for all effective dates. In this override, you would normally join to dates view to generate effective date value
 
-  protected def loadFact(effDateYYYY_MM_DD: String, stgSrcViewWithMonikerName: String): Option[DataFrame] = None // Override this method to load new data one effective dates at a time. Dimensions with type 2 columns can only use this method to load new data
+  protected def loadFact(effDateYYYY_MM_DD: String, stgSrcView: String): Option[DataFrame] = None // Override this method to load new data one effective dates at a time. Dimensions with type 2 columns can only use this method to load new data
   // End of overridable methods
 
-  final override private[etl] def etlModelObject(stgSrcViewsWithMonikerNames: List[String], datesToProcess: List[Date]): Option[DataFrame] = {
+  final override private[etl] def etlModelObject(stgSrcViewsWithIdNames: List[String], datesToProcess: List[Date]): Option[DataFrame] = {
 
     dwEtlLog.info(s"-- Processing fact $factName for following ${datesToProcess.size} dates: ${datesToProcess.mkString(",")}")
 
@@ -117,13 +117,13 @@ abstract class Fact(private val factName: String)
       FileHelper.deleteDirectoryOrFileIfExists(configDwEtl.getFactFilePath(factName, false))
     }
 
-    preProcess(stgSrcViewsWithMonikerNames, datesToProcess)
+    preProcess(stgSrcViewsWithIdNames, datesToProcess)
 
-    val dfFactForAllEffectiveDatesAtOnceAsOption = doLoadForAllSources(stgSrcViewsWithMonikerNames)
+    val dfFactForAllEffectiveDatesAtOnceAsOption = doLoadForAllSources(stgSrcViewsWithIdNames)
 
-    val dfFactForAllEffectiveDatesOneAtATimeAsOption = if (!dfFactForAllEffectiveDatesAtOnceAsOption.isDefined) {
+    val dfFactForAllEffectiveDatesOneAtATimeAsOption = if (!dfFactForAllEffectiveDatesAtOnceAsOption.isDefined && datesToProcess.nonEmpty ) {
       val dfFactForEachEffectiveDateAsOption = for (effDate <- datesToProcess;
-                                                    dfFactForEffectiveDateAsOption = doLoadForAllSources(stgSrcViewsWithMonikerNames, getDateFormatted(effDate, "yyyy-MM-dd")) // effDate.toString
+                                                    dfFactForEffectiveDateAsOption = doLoadForAllSources(stgSrcViewsWithIdNames, getDateFormatted(effDate, "yyyy-MM-dd")) // effDate.toString
                                                     ) yield dfFactForEffectiveDateAsOption
       // merge all dataframes into one for all effective dates
       val dfFactForAllEffectiveDatesAsOption = dfFactForEachEffectiveDateAsOption.reduceLeft((df1AsOption, df2AsOption) =>
@@ -158,7 +158,7 @@ abstract class Fact(private val factName: String)
       dwEtlLog.info(s"-- Setting keys on fact $factName for all dates and all sources")
       val dfFactWithKeys = setKeys(dfFactForAllEffectiveDates)
 
-      val dfFactWithKeysPostProcessed = postProcess(stgSrcViewsWithMonikerNames, datesToProcess, dfFactWithKeys)
+      val dfFactWithKeysPostProcessed = postProcess(stgSrcViewsWithIdNames, datesToProcess, dfFactWithKeys)
 
       // Persist fact table. It will be used to create a copy with values to set keys as well as the fact table itself
       dfFactWithKeysPostProcessed.persist(StorageLevel.MEMORY_AND_DISK)
@@ -204,27 +204,27 @@ abstract class Fact(private val factName: String)
   }
 
   private def doLoadForAllSources(
-      stgSrcViewsWithMonikerNames: List[String],
+      stgSrcViewsWithIdNames: List[String],
       effDateYYYY_MM_DD: String = null): Option[DataFrame] = {
 
     // loop though all sources to load the facts and merge data from each source into a single result
     // Sources earlier in the list have precedence over the ones later in the list
     val dfSrcFactFromAllSourcesAsOption = for (
-      stgSrcViewWithMonikerName <- if (stgSrcViewsWithMonikerNames.isEmpty) List(ModelObject.viewNameForNonExistentDataSource) else stgSrcViewsWithMonikerNames;
-      dfSrcFactAsOption = if (effDateYYYY_MM_DD == null) loadFact(stgSrcViewWithMonikerName) else loadFact(effDateYYYY_MM_DD, stgSrcViewWithMonikerName);
+      stgSrcView <- if (stgSrcViewsWithIdNames.isEmpty) List(ModelObject.viewNameForNonExistentDataSource) else stgSrcViewsWithIdNames;
+      dfSrcFactAsOption = if (effDateYYYY_MM_DD == null) loadFact(stgSrcView) else loadFact(effDateYYYY_MM_DD, stgSrcView);
       dfSrcFactWithCorrectColumnNamesAsOption = if (dfSrcFactAsOption.isDefined) {
         val dfSrcFact = dfSrcFactAsOption.get
 
         // This will throw an exception if there are duplicates
-        checkLoadResultForDuplicateColumns(dfSrcFact, stgSrcViewWithMonikerName)
+        checkLoadResultForDuplicateColumns(dfSrcFact, stgSrcView)
 
-        checkForMismatchedFieldNamesInActualAndExpectedSchemas(dfSrcFact, stgSrcViewWithMonikerName, factSchema)
+        checkForMismatchedFieldNamesInActualAndExpectedSchemas(dfSrcFact, stgSrcView, factSchema)
 
         // At this point the number of columns is correct and the names match the ones in the configuration.
         // The fields may still be in incorrect order.
         // Before arranging columns in correct order make sure that the types in the source result are compatible with types in the schema
         // Make sure that the fields in the result match expected types
-        checkFieldsWithSameNamesForTypeCompatibility(dfSrcFact, factSchema, stgSrcViewWithMonikerName)
+        checkFieldsWithSameNamesForTypeCompatibility(dfSrcFact, factSchema, stgSrcView)
 
         val dfSrcFactWithCorrectColumnNames = dfSrcFact.selectInCorrectOrderCastToCorrectTypeAndMakeNullable(factSchema)
 
@@ -478,7 +478,7 @@ abstract class Fact(private val factName: String)
       // if the data partitioned, the partitioned columns will be the last.
       // However the new data dfFactWitMetadataCols has all columns in correct order
       val schemaWithMetadataCols = dfFactWithMetadataCols.schema
-      val dfOldFactWithNormalizedSchema = dfOldFact.setNewSchema(schemaWithMetadataCols)
+      val dfOldFactWithNormalizedSchema = dfOldFact.selectInCorrectOrderCastToCorrectTypeAndMakeNullable(schemaWithMetadataCols)
       val dfFactMerged = mergeSourceDataChanges(this, dfFactWithMetadataCols, isNewDataPreparedForMerge = true, dfAllMergeKeysAsOption.get, dfOldFactWithNormalizedSchema, new SimpleDateFormat("yyyy-MM-dd").parse("1900-01-01"))
       FileHelper.saveDataFrameAsParquet(dfFactMerged, factFilePath, columnsPartitionBy = configDwEtl.getPartitionByCols(factName))
     }
@@ -532,7 +532,15 @@ abstract class Fact(private val factName: String)
         // if the data partitioned, the partitioned columns will be the last.
         // However, the new data dfFactWitMetadataCols has all columns in correct order
         val schemaWithMetadataCols = dfFactWithMetadataCols.schema
-        val dfOldFactWithNormalizedSchema = dfOldFactForChangedPartitions.setNewSchema(schemaWithMetadataCols)
+        if (isDebugDwLib) {
+          dfOldFactForChangedPartitions.printSchema()
+          dfOldFactForChangedPartitions.show(5)
+        }
+        val dfOldFactWithNormalizedSchema = dfOldFactForChangedPartitions.selectInCorrectOrderCastToCorrectTypeAndMakeNullable(schemaWithMetadataCols)
+        if (isDebugDwLib) {
+          dfOldFactWithNormalizedSchema.printSchema()
+          dfOldFactWithNormalizedSchema.show(5)
+        }
         val dfFactMerged = mergeSourceDataChanges(this, dfFactWithMetadataCols, isNewDataPreparedForMerge = true, dfAllMergeKeysAsOption.get, dfOldFactWithNormalizedSchema, new SimpleDateFormat("yyyy-MM-dd").parse("1900-01-01"))
 
         FileHelper.saveDataFrameAsParquetReplacePartitions(dfFactMerged, factFilePath, columnsPartitionBy = configDwEtl.getPartitionByCols(factName))

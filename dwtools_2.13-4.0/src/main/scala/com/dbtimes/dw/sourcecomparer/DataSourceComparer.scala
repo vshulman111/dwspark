@@ -42,7 +42,6 @@ object DataSourceComparer {
   def validateConfig(appConfig: Config): Unit = {
 
     val schemaBaseFileName = "sourcecomparer-config-schema"
-    val pathToVersionField = "sourceCompare.sourceCompareConfigVersion"
     var errors: mutable.Seq[String] = mutable.Seq.empty[String]
 
     // Validate schema in three steps:
@@ -52,7 +51,7 @@ object DataSourceComparer {
     //    - unique names of actions
 
     // Do Steps 1 and 2
-    val errorsAndwarnings = MiscHelper.validateConfigVersionAndConfigAgainstThatVersion(appConfig, schemaBaseFileName, pathToVersionField)
+    val errorsAndwarnings = MiscHelper.validateConfig(appConfig, schemaBaseFileName)
 
     errors ++= errorsAndwarnings._1
     val warnings = errorsAndwarnings._2
@@ -149,8 +148,8 @@ object DataSourceComparer {
     dfRightWithUniqueKey.createOrReplaceTempView(rightWithUniqueKeyViewName)
 
     // Determine keys that are in one source only
-    val diffsInLeftOnly = getDiffsForInFirstSourcesOnly(scenario, leftWithUniqueKeyViewName, rightWithUniqueKeyViewName, scenario.getMoniker(true), scenario.getMoniker(false))
-    val diffsInRightOnly = getDiffsForInFirstSourcesOnly(scenario, rightWithUniqueKeyViewName, leftWithUniqueKeyViewName, scenario.getMoniker(false), scenario.getMoniker(true))
+    val diffsInLeftOnly = getDiffsForInFirstSourcesOnly(scenario, leftWithUniqueKeyViewName, rightWithUniqueKeyViewName, scenario.getLabel(true), scenario.getLabel(false))
+    val diffsInRightOnly = getDiffsForInFirstSourcesOnly(scenario, rightWithUniqueKeyViewName, leftWithUniqueKeyViewName, scenario.getLabel(false), scenario.getLabel(true))
 
     // Go through all Not Key columns and compare
     val nonUniqueKeys = scenario.getColumnsToCompare(dfLeft.columns.toList)
@@ -200,7 +199,7 @@ object DataSourceComparer {
       .persist(StorageLevel.MEMORY_AND_DISK) // This is tested - df reused for all columns
   }
 
-  private def getDiffsForInFirstSourcesOnly(scenario: ScenarioConfig, viewNameFirst: String, viewNameSecond: String, monikerFirst: String, monikerSecond: String): DataFrame = {
+  private def getDiffsForInFirstSourcesOnly(scenario: ScenarioConfig, viewNameFirst: String, viewNameSecond: String, labelFirst: String, labelSecond: String): DataFrame = {
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
     val uniqueKeys = scenario.getUniqueKeyColumns
     val sqlDiffsInFirstSourcesOnly =
@@ -208,16 +207,16 @@ object DataSourceComparer {
          |SELECT	
          |	${uniqueKeys.mkString("\n  first.`", "`,\n  first.`", "`")},
          |	CAST(NULL AS STRING)	AS `Column Name`		,
-         |	CAST(NULL AS STRING)	AS `${monikerFirst} Value`		,
-         |	CAST(NULL AS STRING)	AS `${monikerSecond} Value`	,
-         |	CAST( 'In ${monikerFirst} only'	AS STRING )	AS Message
+         |	CAST(NULL AS STRING)	AS `${labelFirst} Value`		,
+         |	CAST(NULL AS STRING)	AS `${labelSecond} Value`	,
+         |	CAST( 'In ${labelFirst} only'	AS STRING )	AS Message
          |FROM $viewNameFirst AS first
          |WHERE NOT EXISTS (SELECT 1
          |    							FROM $viewNameSecond AS second
          |							    WHERE second.UniqueKeyConcat = first.UniqueKeyConcat )
          |${if (scenario.getMaxSameDifferences.isDefined) "LIMIT " + scenario.getMaxSameDifferences.get else ""}
          |    """.stripMargin
-    comparerLog.debug(s"  Creating data frame with differences for 'In ${monikerFirst} only' in using sql:\n" + sqlDiffsInFirstSourcesOnly)
+    comparerLog.debug(s"  Creating data frame with differences for 'In ${labelFirst} only' in using sql:\n" + sqlDiffsInFirstSourcesOnly)
     val dfDiffsInFirstSourcesOnly = spark.sql(sqlDiffsInFirstSourcesOnly)
     if (scenario.getIsDebugDwLib) {
       dfDiffsInFirstSourcesOnly.show(3)
@@ -233,8 +232,8 @@ object DataSourceComparer {
          |SELECT
          |	${uniqueKeys.mkString("\n  leftSrc.`", "`,\n  leftSrc.`", "`")},
          |	'$columnName'	AS `Column Name`		,
-         |	IFNULL( FORMAT_NUMBER( leftSrc.`$columnName`, 6 ), 'NULL' )	AS `${scenario.getMoniker(true)} Value`		,
-         |	IFNULL( FORMAT_NUMBER( rightSrc.`$columnName`, 6 ), 'NULL' )	AS `${scenario.getMoniker(false)} Value`	,
+         |	IFNULL( FORMAT_NUMBER( leftSrc.`$columnName`, 6 ), 'NULL' )	AS `${scenario.getLabel(true)} Value`		,
+         |	IFNULL( FORMAT_NUMBER( rightSrc.`$columnName`, 6 ), 'NULL' )	AS `${scenario.getLabel(false)} Value`	,
          |	CAST( 'Not equal'	AS STRING )	AS Message
          |FROM $viewNameLeft AS leftSrc
          |  INNER JOIN $viewNameRight AS rightSrc  ON leftSrc.UniqueKeyConcat = rightSrc.UniqueKeyConcat
@@ -257,8 +256,8 @@ object DataSourceComparer {
          |SELECT
          |	${uniqueKeys.mkString("\n  leftSrc.`", "`,\n  leftSrc.`", "`")},
          |	'$columnName'	AS `Column Name`		,
-         |	IFNULL( CAST( leftSrc.`$columnName` AS STRING), 'NULL' )	AS `${scenario.getMoniker(true)} Value`		,
-         |	IFNULL( CAST( rightSrc.`$columnName` AS STRING), 'NULL' )	AS `${scenario.getMoniker(false)} Value`	,
+         |	IFNULL( CAST( leftSrc.`$columnName` AS STRING), 'NULL' )	AS `${scenario.getLabel(true)} Value`		,
+         |	IFNULL( CAST( rightSrc.`$columnName` AS STRING), 'NULL' )	AS `${scenario.getLabel(false)} Value`	,
          |	CAST( 'Not equal'	AS STRING )	AS Message
          |FROM $viewNameLeft AS leftSrc
          |  INNER JOIN $viewNameRight AS rightSrc  ON leftSrc.UniqueKeyConcat = rightSrc.UniqueKeyConcat
@@ -300,8 +299,8 @@ object DataSourceComparer {
          |SELECT
          |	${uniqueKeys.mkString("\n  leftSrc.`", "`,\n  leftSrc.`", "`")},
          |	'$columnName'	AS `Column Name`		,
-         |	IFNULL( CAST( leftSrc.`$columnName` AS STRING), 'NULL' )	AS `${scenario.getMoniker(true)} Value`		,
-         |	IFNULL( CAST( rightSrc.`$columnName` AS STRING), 'NULL' )	AS `${scenario.getMoniker(false)} Value`	,
+         |	IFNULL( CAST( leftSrc.`$columnName` AS STRING), 'NULL' )	AS `${scenario.getLabel(true)} Value`		,
+         |	IFNULL( CAST( rightSrc.`$columnName` AS STRING), 'NULL' )	AS `${scenario.getLabel(false)} Value`	,
          |	CAST( 'Not equal'	AS STRING )	AS Message
          |FROM $viewNameLeft AS leftSrc
          |  INNER JOIN $viewNameRight AS rightSrc  ON leftSrc.UniqueKeyConcat = rightSrc.UniqueKeyConcat

@@ -28,9 +28,9 @@ import com.dbtimes.nfldw.DwNFL
  */
 class BridgeTeamsPlays(factName: String) extends FactsNFL(factName) {
 
-  override def loadFact(effDateYYYY_MM_DD: String, stgSrcViewWithMonikerName: String): Option[DataFrame] = {
+  override def loadFact(effDateYYYY_MM_DD: String, stgSrcView: String): Option[DataFrame] = {
 
-    val dfFact = if (stgSrcViewWithMonikerName == "PlayByPlay") {
+    val dfFact = if (stgSrcView == "PlayByPlay") {
       val sqlStgSource =
         s"""
            |WITH PlaysWithTeamAndRoles
@@ -39,7 +39,7 @@ class BridgeTeamsPlays(factName: String) extends FactsNFL(factName) {
            |			SELECT	*,
            |					OffenseTeam		AS TeamAbbrev,
            |					'${DwNFL.teamRoleOffense}'	AS TeamRole
-           |			FROM $stgSrcViewWithMonikerName
+           |			FROM $stgSrcView
            |			WHERE	SeasonYear = udfSeasonYear( CAST( '$effDateYYYY_MM_DD' AS DATE) )
            |					AND OffenseTeam IS NOT NULL
            |					AND PlayType != 'TIMEOUT'		-- All teams are defense for timeout, so looks like need to exclude timeout, since the team is determined from Description
@@ -47,7 +47,7 @@ class BridgeTeamsPlays(factName: String) extends FactsNFL(factName) {
            |			SELECT	*,
            |					DefenseTeam		AS TeamAbbrev,
            |					'${DwNFL.teamRoleDefense}'	AS TeamRole
-           |			FROM $stgSrcViewWithMonikerName
+           |			FROM $stgSrcView
            |			WHERE	SeasonYear = udfSeasonYear( CAST( '$effDateYYYY_MM_DD' AS DATE) )
            |					AND DefenseTeam IS NOT NULL
            |					AND PlayType != 'TIMEOUT'		-- All teams are defense for timeout, so looks like need to exclude timeout, since the team is determined from Description
@@ -55,21 +55,21 @@ class BridgeTeamsPlays(factName: String) extends FactsNFL(factName) {
            |			SELECT	*,
            |					PenaltyTeam		         AS TeamAbbrev,
            |					'${DwNFL.teamRolePenalty}'	AS TeamRole
-           |			FROM $stgSrcViewWithMonikerName
+           |			FROM $stgSrcView
            |			WHERE	SeasonYear = udfSeasonYear( CAST( '$effDateYYYY_MM_DD' AS DATE) )
            |					AND PenaltyTeam IS NOT NULL
            |			UNION ALL
            |			SELECT	*,
            |					RTRIM( SUBSTRING( Description, INSTR( 'BY ', Description ) + 3, 3 ) )	AS TeamAbbrev,
            |					'${DwNFL.teamRoleTimeout}'	AS TeamRole
-           |			FROM $stgSrcViewWithMonikerName
+           |			FROM $stgSrcView
            |			WHERE	SeasonYear = udfSeasonYear( CAST( '$effDateYYYY_MM_DD' AS DATE) )
            |					AND PlayType = 'TIMEOUT'
            |         AND INSTR( 'BY ', Description ) > 0   -- this will exclude timeouts not called by a team, e.g., this one TIMEOUT AT 07:46. INJURY TO OFFICIAL. in game 2015110104
            |		)
            |SELECT
 					|		-- SeasonYear																																	    AS SeasonYear,  -- This is partitioning column. Create Bridge without it
-					|		"$stgSrcViewWithMonikerName"																																AS DataSourceMoniker,
+					|		"$stgSrcView"																																AS DataSourceId,
 					|	  CAST( GameId AS STRING )																										    AS GameId,
 					|		CAST( GameDate AS DATE )																										    AS PlayDate,
            |		TeamAbbrev					                                                            AS TeamAbbrevName	,
@@ -90,7 +90,7 @@ class BridgeTeamsPlays(factName: String) extends FactsNFL(factName) {
 					|
 					| """.stripMargin
 
-      println(s"-- Loading fact $factName from source $stgSrcViewWithMonikerName using sql:\n" + sqlStgSource)
+      println(s"-- Loading fact $factName from source $stgSrcView using sql:\n" + sqlStgSource)
 
       val spark = SparkSession.builder().getOrCreate()
       val dfStgSource = spark.sql(sqlStgSource)

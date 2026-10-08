@@ -28,11 +28,11 @@ import org.apache.spark.sql.SparkSession
  */
 class DimDataSource(dimName: String) extends Dim(dimName) {
 
-  override def loadDim(stgSrcViewWithMonikerName: String): Option[DataFrame] = {
+  override def loadDim(stgSrcView: String): Option[DataFrame] = {
 
     val spark = SparkSession.builder().getOrCreate()
-    val dfSources = spark.createDataFrame(DwNFL.getStgSourcesMonikerDescriptionTransactionName)
-      .toDF( "DataSourceMoniker", "DataSourceDescription", "TransactionName" )
+    val dfSources = spark.createDataFrame(DwNFL.getStgSourcesIdDescriptionTransactionName)
+      .toDF( "DataSourceId", "DataSourceDescription", "TransactionName" )
 
     dfSources.printSchema()
 

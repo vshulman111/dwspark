@@ -33,7 +33,7 @@ abstract private[sourcecomparer] class ScenarioSourceLoader {
       dfBase.createOrReplaceTempView( viewNameBaseDf )
 
       val sqlQueryToCreateSubsetToCompare = scenario.getSubsetQueryToCreateSubsetToCompare( isLeftSource ).get.replace( "___", viewNameBaseDf )
-      comparerLog.debug(s"  Creating subset data frame for actual compare of ${scenario.getMoniker(isLeftSource)} data source using sql:\n" + sqlQueryToCreateSubsetToCompare )
+      comparerLog.debug(s"  Creating subset data frame for actual compare of ${scenario.getLabel(isLeftSource)} data source using sql:\n" + sqlQueryToCreateSubsetToCompare )
       val dfToCompare = spark.sql(sqlQueryToCreateSubsetToCompare)
       if (scenario.getIsDebugDwLib) {
         dfToCompare.show(3)

@@ -34,16 +34,12 @@ private [dw] object MiscHelper {
    *
    * @param appConfig
    * @param schemaBaseFileName
-   * @param pathToVersionField - this path is specific to each configuration, e.g., for source loader it would be "sourceLoad.sourceLoadConfigVersion"
-   *                           Given that I have schemas with version field name, this can be detected automatically, but i will leave this for later - TODO
    * @return - tuple (errors,warnings)
    */
 
-  private[dw] def validateConfigVersionAndConfigAgainstThatVersion(
+  private[dw] def validateConfig(
       appConfig: Config,
-      schemaBaseFileName: String,
-      pathToVersionField: String ): ( Seq[String], Seq[String] ) = {
-    val schemaVersionValidationFileName = schemaBaseFileName + "_version.json"
+      schemaBaseFileName: String ): ( Seq[String], Seq[String] ) = {
 
     // Verify appConfig
      val schemaRegistryConfig: SchemaRegistryConfig = SchemaRegistryConfig.builder()
@@ -54,34 +50,22 @@ private [dw] object MiscHelper {
     val factory = SchemaRegistry.withDialect(Dialects.getDraft202012(), builder => builder.schemaRegistryConfig(schemaRegistryConfig));
     var errorsAndWarnings: mutable.Seq[String] = mutable.Seq.empty[String]
 
-    // Validate schema in three steps:
-    // Step 1. Validate schema version of configuration file
-    // Step 2. Load schema of correct version and validate configuration against that version
-    // Step 3. Validate schema in the code for components not supported by generic  schema validation
+    // Validate schema in two steps:
+    // Step 1. Load schema of correct version and validate configuration against that version
+    // Step 2. Validate schema in the code for components not supported by generic  schema validation
     //    - unique names of actions
 
-    for (step <- (1 to 2).takeWhile( _ => errorsAndWarnings.isEmpty)) { // if step validation failed do not continue to the next step - return errors from first step that validates version
+    val schemaValidationFileName = schemaBaseFileName + ".json"
+    val configSchema = ConfigFactory.parseResources( schemaValidationFileName ).resolve();
+    val jsonSchema = configSchema.root().render(ConfigRenderOptions.concise());
+    val schema = factory.getSchema(jsonSchema)
 
-      val configSchema = ConfigFactory.parseResources(
-          if ( step == 1 ) {
-            schemaVersionValidationFileName
-          }
-          else {
-            // here we are in step 2. That means that version validation succeeded and we can safely extract the version from the configuration
-            val configVersion = appConfig.getString(pathToVersionField) // previous validation insures that this path exists and has correct version number
-            val schemaValidationFileName = schemaBaseFileName + s"""_v$configVersion.json"""
-            schemaValidationFileName
-          } ).resolve();
-      val jsonSchema = configSchema.root().render(ConfigRenderOptions.concise());
-      val schema = factory.getSchema(jsonSchema)
-
-      // Validate the JSON data
-      val validationMessages = schema.validate(jsonToValidate, InputFormat.JSON)
-      // prepare return messages
-      if (!validationMessages.isEmpty) {
-        val listValidationMessages = validationMessages.asScala
-        listValidationMessages.foreach(message => errorsAndWarnings = errorsAndWarnings :+ message.toString)
-      }
+    // Validate the JSON data
+    val validationMessages = schema.validate(jsonToValidate, InputFormat.JSON)
+    // prepare return messages
+    if (!validationMessages.isEmpty) {
+      val listValidationMessages = validationMessages.asScala
+      listValidationMessages.foreach(message => errorsAndWarnings = errorsAndWarnings :+ message.toString)
     }
 
     // Split into errors and warnings

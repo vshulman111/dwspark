@@ -78,7 +78,7 @@ final private[etl] class ConfigDwEtl(private[etl] val configDwEtl: Config) exten
     // Check: Each natural key column must have unknown value - implemented in schema validation
 
     val stgSources = configDwEtl.getConfigList("dwEtl.stgSources").asScala.toList
-    // Check: make sure the sources have "moniker" attribute defined - implemented in schema validation
+    // Check: make sure the sources have "id" attribute defined - implemented in schema validation
     // Check: make sure all sources are files, i.e., "fileSource" attribute defined - implemented in schema validation
     // Check: make sure the file sources have "fileSource.path" attribute defined - implemented in schema validation
     // Check: make sure the sources are parquet files - implemented in schema validation
@@ -172,13 +172,13 @@ final private[etl] class ConfigDwEtl(private[etl] val configDwEtl: Config) exten
   }
 
 
-  private[etl] def getStgSourceMonikersOfFact(factName: String): List[String] = {
+  private[etl] def getStgSourceIdsOfFact(factName: String): List[String] = {
     val factConfig = getFactConfiguration(factName)
-    if (!factConfig.hasPath("stgSourcesMonikers")) {
+    if (!factConfig.hasPath("stgSourceIds")) {
       List.empty[String]
     }
     else {
-      factConfig.getStringList("stgSourcesMonikers").asScala.toList
+      factConfig.getStringList("stgSourceIds").asScala.toList
     }
   }
 
@@ -410,7 +410,7 @@ final private[etl] class ConfigDwEtl(private[etl] val configDwEtl: Config) exten
 
   /**
    *
-   * @return Map[String, (String, EffectiveDateRule, Option[String]) ] - a map of stg source moniker and a 3-tuple with
+   * @return Map[String, (String, EffectiveDateRule, Option[String]) ] - a map of stg source id and a 3-tuple with
    *         1. the name of effective date column,
    *            2. the rule type of dates in that source
    *            3. Optional name of the Timestamp column
@@ -559,13 +559,13 @@ final private[etl] class ConfigDwEtl(private[etl] val configDwEtl: Config) exten
     if (configDwEtl.hasPath("dwEtl.dimAuthority.fileDimensionsDestination.parquet")) true else false
   }
 
-  private[etl] def getStgSourceMonikersOfDim(dimName: String): List[String] = {
+  private[etl] def getStgSourceIdsOfDim(dimName: String): List[String] = {
     val dimConfig = getDimensionConfiguration(dimName)
-    if (!dimConfig.hasPath("stgSourcesMonikers")) {
+    if (!dimConfig.hasPath("stgSourceIds")) {
       List.empty[String]
     }
     else {
-      dimConfig.getStringList("stgSourcesMonikers").asScala.toList
+      dimConfig.getStringList("stgSourceIds").asScala.toList
     }
   }
 
@@ -612,23 +612,23 @@ final private[etl] class ConfigDwEtl(private[etl] val configDwEtl: Config) exten
     columnsInConfiguration
   }
 
-  private[etl] def getDimNamesWhereStgSourceIsUsed(sourceMoniker: String): List[String] = {
-    for (dimName <- getDimNamesToLoad if getStgSourceMonikersOfDim(dimName).contains(sourceMoniker)) yield dimName
+  private[etl] def getDimNamesWhereStgSourceIsUsed(sourceId: String): List[String] = {
+    for (dimName <- getDimNamesToLoad if getStgSourceIdsOfDim(dimName).contains(sourceId)) yield dimName
   }
 
   ////////////////////////////////////////////////////////////////////////////
   ////////  Dims and Facts
   ////////////////////////////////////////////////////////////////////////////
-  private[etl] def getStgSourceMonikersOfModelObject(modelObjectName: String): List[String] = {
+  private[etl] def getStgSourceIdsOfModelObject(modelObjectName: String): List[String] = {
     // At most one of these two methods will return a list. The final list may be empty if the object does not have any sources
     val dimNamePatternRegEx = configDwEtl.getString("dwEtl.dimAuthority.dimensionNamePattern").r
     val factNamePatternRegEx = configDwEtl.getString("dwEtl.dataMart.factNamePattern").r
 
     if (dimNamePatternRegEx.findFirstMatchIn(modelObjectName).isDefined) {
-      getStgSourceMonikersOfDim(modelObjectName)
+      getStgSourceIdsOfDim(modelObjectName)
     }
     else if (factNamePatternRegEx.findFirstMatchIn(modelObjectName).isDefined) {
-      getStgSourceMonikersOfFact(modelObjectName)
+      getStgSourceIdsOfFact(modelObjectName)
     }
     else {
       throw new RuntimeException("""ETL  ERROR: model object """ + modelObjectName + """does not match a name of a dimension or a fact """)
@@ -638,43 +638,36 @@ final private[etl] class ConfigDwEtl(private[etl] val configDwEtl: Config) exten
   ////////////////////////////////////////////////////////////////////////////
   ////////  Stg Sources
   ////////////////////////////////////////////////////////////////////////////
-  private[etl] def getSourceMonikers: List[String] = {
+  private[etl] def getSourceIds: List[String] = {
     val stgSources = configDwEtl.getConfigList("dwEtl.stgSources").asScala.toList
     stgSources map {
-      case source: Config => source.getString("moniker")
+      case source: Config => source.getString("id")
     }
   }
 
-  private[etl] def getSourceMonikers( stgSources: List[Config] ): List[String] = {
+  private[etl] def getSourceIds( stgSources: List[Config] ): List[String] = {
     stgSources map {
-      case source: Config => source.getString("moniker")
+      case source: Config => source.getString("id")
     }
   }
 
   /**
    *
-   * @return Map[String, (String, EffectiveDateRule, Option[String]) ] - a map of stg source moniker and a 3-tuple with
+   * @return Map[String, (String, EffectiveDateRule, Option[String]) ] - a map of stg source id and a 3-tuple with
    *         1. the name of effective date column,
    *         2. the rule type of dates in that source
    *         3. Optional name of the Timestamp column
    */
-  private[etl] def getStgSourceMonikersForDeterminingEffectiveDates(modelObjectName: String): Map[String, (String, EffectiveDateRule, Option[String])] = {
+  private[etl] def getStgSourceIdsForDeterminingEffectiveDates(modelObjectName: String): Map[String, (String, EffectiveDateRule, Option[String])] = {
     val stgSources = configDwEtl.getConfigList("dwEtl.stgSources").asScala.toList
-    val stgSourceDefaultForEffectiveDate = stgSources filter {
-      case source: Config => if (source.hasPath("effectiveDateColumn") && source.hasPath("isDefaultForEffectiveDate") && source.getBoolean("isDefaultForEffectiveDate")) true else false
-    }
-
     val stgSourcesWithEffectiveDateForModelObject = stgSources filter {
       case source: Config => if (source.hasPath("effectiveDateColumn")
-        && getStgSourceMonikersOfModelObject(modelObjectName).contains(source.getString("moniker"))) true else false
+        && getStgSourceIdsOfModelObject(modelObjectName).contains(source.getString("id"))) true else false
     }
 
-    val stgSourcesWithEffectiveDate = if (stgSourcesWithEffectiveDateForModelObject.isEmpty) stgSourceDefaultForEffectiveDate else stgSourcesWithEffectiveDateForModelObject
-
-
-    val stgSourceAndEffectiveDateProperties = stgSourcesWithEffectiveDate map {
+    val stgSourceAndEffectiveDateProperties = stgSourcesWithEffectiveDateForModelObject map {
       case source: Config =>
-        source.getString("moniker") -> (
+        source.getString("id") -> (
           source.getString("effectiveDateColumn"), // _1
           if (source.hasPath("effectiveDateRule")) {
             source.getString("effectiveDateRule") match {
@@ -696,35 +689,43 @@ final private[etl] class ConfigDwEtl(private[etl] val configDwEtl: Config) exten
     stgSourceAndEffectiveDateProperties.toMap
   }
 
-  private[etl] def getStgSourceTimestampColumn(sourceMoniker: String): Option[String] = {
-    if (getSourceConfiguration(sourceMoniker).hasPath("timestampColumn")) {
-      Some(getSourceConfiguration(sourceMoniker).getString("timestampColumn"))
+  private[etl] def getStgSourceTimestampColumn(sourceId: String): Option[String] = {
+    if (getSourceConfiguration(sourceId).hasPath("timestampColumn")) {
+      Some(getSourceConfiguration(sourceId).getString("timestampColumn"))
     } else {
       None
     }
   }
 
-  private def getSourceConfiguration(sourceMoniker: String): Config = {
+  private[etl] def getStgSourceEffDateColumn(sourceId: String): Option[String] = {
+    if (getSourceConfiguration(sourceId).hasPath("effectiveDateColumn")) {
+      Some(getSourceConfiguration(sourceId).getString("effectiveDateColumn"))
+    } else {
+      None
+    }
+  }
+
+  private def getSourceConfiguration(sourceId: String): Config = {
     val stgSources = configDwEtl.getConfigList("dwEtl.stgSources").asScala.toList
     val stgSource = stgSources find {
       case source: Config => {
-        source.getString("moniker") == sourceMoniker
+        source.getString("id") == sourceId
       }
     }
     if (!stgSource.isDefined)
-      throw new RuntimeException("""ETL  ERROR: etl source """ + sourceMoniker + """is not defined """)
+      throw new RuntimeException("""ETL  ERROR: etl source """ + sourceId + """is not defined """)
     stgSource.get
   }
 
-  private[etl] def getIsFileSourceParquet(sourceMoniker: String): Boolean = {
-    if (getSourceConfiguration(sourceMoniker).hasPath("fileSource.parquet"))
+  private[etl] def getIsFileSourceParquet(sourceId: String): Boolean = {
+    if (getSourceConfiguration(sourceId).hasPath("fileSource.parquet"))
       true
     else
       false
   }
 
-  private[etl] def getSourceFilePath(sourceMoniker: String): String = {
-    getSourceConfiguration(sourceMoniker).getString("fileSource.path")
+  private[etl] def getSourceFilePath(sourceId: String): String = {
+    getSourceConfiguration(sourceId).getString("fileSource.path")
   }
 
 }

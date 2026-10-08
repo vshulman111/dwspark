@@ -24,8 +24,8 @@ import org.apache.spark.sql.SparkSession
 
 class DimPlayTime(dimName: String) extends Dim(dimName) {
 
-  override def loadDim(stgSrcViewWithMonikerName: String): Option[DataFrame] = {
-    val sqlStgSource = if (stgSrcViewWithMonikerName == "PlayByPlay") {
+  override def loadDim(stgSrcView: String): Option[DataFrame] = {
+    val sqlStgSource = if (stgSrcView == "PlayByPlay") {
       """| SELECT DISTINCT
          |   IFNULL( CAST( Quarter AS STRING), '' ) AS Quarter,
          |   IFNULL( CAST( Minute AS STRING), '' )  AS Minute,

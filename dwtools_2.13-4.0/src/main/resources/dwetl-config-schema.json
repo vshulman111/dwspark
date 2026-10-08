@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Data Warehouse ETL Configuration v2",
+  "title": "Data Warehouse ETL Configuration",
   "description": "Defines fields for the Data Warehouse application that uses dw Etl library. The configuration JSON file can have other fields at the top level in addition to dwEtl object.",
   "type": "object",
   "properties": {
@@ -8,11 +8,6 @@
       "type": "object",
       "description": "Configuration for DW Etl process",
       "properties": {
-        "dwEtlConfigVersion": {
-          "type": "string",
-          "description": "version of DW ETL configuration",
-          "const": "2"
-        },
         "isDebugDwLib": {
           "type": "boolean",
           "description": "If the value is true, there will be some dataframe related output sent to the standard output from the library causing slowdown in job execution."
@@ -63,9 +58,9 @@
           "items": {
             "type": "object",
             "properties": {
-              "moniker": {
+              "id": {
                 "type": "string",
-                "description": "Staging source moniker is a unique identifier of a staging source. It is used as view name for respective source in Spark SQL."
+                "description": "Staging source id is a unique identifier of a staging source. It is used as view name for respective source in Spark SQL."
               },
               "description": {
                 "type": "string"
@@ -73,6 +68,7 @@
               "applicationSpecific": {
                 "type": "object",
                 "unevaluatedProperties": true,
+                "deprecated": true,
                 "not": true,
                 "customMessage": {
                   "not": "[WARN] \"applicationSpecific\" attribute is deprecated and will be removed from future schema versions. For staging source specific attributes use configuration outside of \"dwEtl\" object or define needed values in application code"
@@ -82,17 +78,13 @@
                 "type": "string",
                 "description": "A column in a staging source data that is effective date for the current staging source."
               },
-              "isDefaultForEffectiveDate": {
-                "type": "boolean",
-                "description": "There can be only one default effective date across all staging sources. When is set to true it designates effective date in current staging source as a default effective date."
-              },
               "timestampColumn": {
                 "type": "string",
                 "description": "A column in a staging source data that has source load timestamp. Timestamp can be used for incremental processing of dimension in subsequent ETL runs."
               },
               "effectiveDateRule": {
                 "type": "string",
-                "description": "An attribute to specify how to derive effective date from effectiveDateColumn. The values can be\n \"DISTINCT\" - only the dates in the stg source are used in the etl,\n \"WEEKDAYS\" - all days between min and max values excluding weekends, or\n \"ALL\" - all days between min and max values",
+                "description": "An attribute to specify how to derive effective date from effectiveDateColumn. The values can be\n \"DISTINCT\" - only the dates in the staging source are used in the etl,\n \"WEEKDAYS\" - all days between min and max values excluding weekends, or\n \"ALL\" - all days between min and max values",
                 "enum": [
                   "ALL",
                   "DISTINCT",
@@ -125,7 +117,7 @@
               "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
             },
             "required": [
-              "moniker",
+              "id",
               "fileSource"
             ],
             "unevaluatedProperties": false
@@ -202,12 +194,12 @@
                 "type": "boolean",
                 "description": "If set to false the dimension will not be loaded. Can be used to create separate configurations to load specific dimensions or during development to skip the load of already tested dimensions."
               },
-              "stgSourcesMonikers": {
+              "stgSourceIds": {
                 "type": "array",
                 "items": {
                   "type": "string"
                 },
-                "description": "Monikers of staging sources used to load this dimension. DW ETL will call a loadDim override for each source. If there are no staging sources loadDimm will be called just once."
+                "description": "Ids of staging sources used to load this dimension. DW ETL will call a loadDim override for each source. If there are no staging sources loadDimm will be called just once."
               },
               "dimSources": {
                 "type": "array",
@@ -534,12 +526,12 @@
                   "ADD"
                 ]
               },
-              "stgSourcesMonikers": {
+              "stgSourceIds": {
                 "type": "array",
                 "items": {
                   "type": "string"
                 },
-                "description": "Monikers of staging sources used to load this fact table. DW ETL will call a loadFact override for each source. If there are no staging sources loadFact will be called just once."
+                "description": "Ids of staging sources used to load this fact table. DW ETL will call a loadFact override for each source. If there are no staging sources loadFact will be called just once."
               },
               "dimSources": {
                 "type": "array",
@@ -737,7 +729,6 @@
         "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
       },
       "required": [
-        "dwEtlConfigVersion",
         "jobType",
         "isInitialLoad"
       ],

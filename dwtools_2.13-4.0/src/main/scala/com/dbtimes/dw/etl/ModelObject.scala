@@ -52,7 +52,6 @@ object ModelObject {
   def validateConfig(appConfig: Config): Unit = {
 
     val schemaBaseFileName = "dwetl-config-schema"
-    val pathToVersionField = "dwEtl.dwEtlConfigVersion"
     var errors: mutable.Seq[String] = mutable.Seq.empty[String]
 
     // Validate schema in three steps:
@@ -62,7 +61,7 @@ object ModelObject {
     //    - unique names of actions
 
     // Do Steps 1 and 2
-    val errorsAndwarnings = MiscHelper.validateConfigVersionAndConfigAgainstThatVersion(appConfig, schemaBaseFileName, pathToVersionField)
+    val errorsAndwarnings = MiscHelper.validateConfig(appConfig, schemaBaseFileName )
 
     errors ++= errorsAndwarnings._1
     val warnings = errorsAndwarnings._2
@@ -75,12 +74,12 @@ object ModelObject {
     }
 
     val errorMessage = if (errors.nonEmpty) {
-      errors.mkString( "DW ETL Configuration ERROR(s)\n *", "\n *", "" )
+      errors.mkString("DW ETL Configuration ERROR(s)\n *", "\n *", "")
     }
     else
       ""
     val warningMessage = if (warnings.nonEmpty) {
-      warnings.mkString( s"""${if (errorMessage.nonEmpty) "\n" else ""}DW ETL Configuration WARNINGS(s)\n *""", "\n *", "" )
+      warnings.mkString(s"""${if (errorMessage.nonEmpty) "\n" else ""}DW ETL Configuration WARNINGS(s)\n *""", "\n *", "")
     }
     else
       ""
@@ -88,7 +87,7 @@ object ModelObject {
     if (errors.nonEmpty) {
       throw new RuntimeException(errorMessage + warningMessage)
     }
-    else if(warnings.nonEmpty) {
+    else if (warnings.nonEmpty) {
       dwEtlLog.warn(warningMessage)
     }
   }
@@ -143,60 +142,99 @@ object ModelObject {
   private def loadStagingSources(): Unit = {
 
     val list = for (
-      stgSourceMoniker <- ModelObject.configDwEtl.getSourceMonikers;
-      dfStgSource = ModelObject.loadStagingSource(stgSourceMoniker, ModelObject.configDwEtl)
-    ) yield stgSourceMoniker -> dfStgSource
+      stgSourceId <- ModelObject.configDwEtl.getSourceIds;
+      dfStgSource = ModelObject.loadStagingSource(stgSourceId, ModelObject.configDwEtl)
+    ) yield stgSourceId -> dfStgSource
 
-    for ((stgSourceMoniker, dfStgSource) <- list) {
-      if (isCacheStgSource(stgSourceMoniker, ModelObject.configDwEtl)) dfStgSource.cache();
-      dfStgSource.createOrReplaceTempView(stgSourceMoniker)
+    for ((stgSourceId, dfStgSource) <- list) {
+      if (isCacheStgSource(stgSourceId, ModelObject.configDwEtl)) dfStgSource.cache();
+      dfStgSource.createOrReplaceTempView(stgSourceId)
     }
 
     ModelObject.stagingSources = list.toMap
   }
 
-  private def loadStagingSource(sourceMoniker: String, configDwEtl: ConfigDwEtl): DataFrame = {
+  private def loadStagingSource(sourceId: String, configDwEtl: ConfigDwEtl): DataFrame = {
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
 
-    val dfStgSource = if (configDwEtl.getIsFileSourceParquet(sourceMoniker)) {
+    val dfStgSource = if (configDwEtl.getIsFileSourceParquet(sourceId)) {
       spark.read.format("org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat")
-        .load(configDwEtl.getSourceFilePath(sourceMoniker))
+        .load(configDwEtl.getSourceFilePath(sourceId))
     }
     else
       throw new RuntimeException("""ETL  ERROR: unsupported source type  """)
 
-    if (isCacheStgSource(sourceMoniker, configDwEtl)) dfStgSource.cache() else dfStgSource
+    if (isCacheStgSource(sourceId, configDwEtl)) dfStgSource.cache() else dfStgSource
   }
 
-  private def getStagingSource(sourceMoniker: String): DataFrame = {
-    ModelObject.stagingSources(sourceMoniker)
+  private def getStagingSource(sourceId: String): DataFrame = {
+    ModelObject.stagingSources(sourceId)
   }
 
-  private def getStagingSourceMaxTimestamp(sourceMoniker: String, configDwEtl: ConfigDwEtl): Option[SqlTimestamp] = {
+  private def getStagingSourceMinChangedEffDateAndMaxTimestamp(sourceId: String, configDwEtl: ConfigDwEtl, dfLastProcessedEffectiveDateTimestampAsOption: Option[DataFrame] ): ( Option[Date], Option[SqlTimestamp] ) = {
 
-    if (ModelObject.stagingSourcesTimestamps.contains(sourceMoniker)) {
-      ModelObject.stagingSourcesTimestamps(sourceMoniker)
+    val spark = SparkSession.builder().getOrCreate() // this gets previously created session
+    // Get max timestamp
+    val maxTimestampForSourceAsOption = if (ModelObject.stagingSourcesTimestamps.contains(sourceId)) {
+      ModelObject.stagingSourcesTimestamps(sourceId)
     }
     else {
-      val spark = SparkSession.builder().getOrCreate() // this gets previously created session
-      val maxRowTimestampAsOption = if (configDwEtl.getStgSourceTimestampColumn(sourceMoniker).isDefined) {
+      val maxRowTimestampAsOption = if (configDwEtl.getStgSourceTimestampColumn(sourceId).isDefined) {
         val maxRowTimestamp = spark.read.format("org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat")
-          .load(configDwEtl.getSourceFilePath(sourceMoniker))
-          .agg(max(configDwEtl.getStgSourceTimestampColumn(sourceMoniker).get)).head().getTimestamp(0)
+          .load(configDwEtl.getSourceFilePath(sourceId))
+          .agg(max(configDwEtl.getStgSourceTimestampColumn(sourceId).get)).head().getTimestamp(0)
 
         Some(maxRowTimestamp)
       }
       else
         None
 
-      ModelObject.stagingSourcesTimestamps += (sourceMoniker -> maxRowTimestampAsOption)
+      ModelObject.stagingSourcesTimestamps += (sourceId -> maxRowTimestampAsOption)
 
       maxRowTimestampAsOption
     }
+
+    // get effective date of the last staging load
+    val changedEffDateAsOption = if ( dfLastProcessedEffectiveDateTimestampAsOption.isDefined
+      && configDwEtl.getStgSourceEffDateColumn(sourceId).isDefined
+      && configDwEtl.getStgSourceTimestampColumn(sourceId).isDefined) {
+
+      val stgSourceEffDateColumn = configDwEtl.getStgSourceEffDateColumn(sourceId).get
+      val stgSourceTimestampColumn = configDwEtl.getStgSourceTimestampColumn(sourceId).get
+
+      val dfStgSource = spark.read.format("org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat")
+        .load(configDwEtl.getSourceFilePath(sourceId))
+        .select( stgSourceEffDateColumn, stgSourceTimestampColumn )
+        .distinct()
+
+      if (configDwEtl.getIsDebugDwLib) {
+        dfStgSource.show(4)
+        dfStgSource.printSchema()
+        dfLastProcessedEffectiveDateTimestampAsOption.get.show(4)
+        dfLastProcessedEffectiveDateTimestampAsOption.get.printSchema()
+      }
+
+      import spark.implicits._
+      val joinedDF = dfStgSource.as("stg")
+        .join( dfLastProcessedEffectiveDateTimestampAsOption.get.as("processed"), $"stg.$stgSourceTimestampColumn" > $"processed.MaxSourceTimestamp", "inner")
+        .select ( "stg.*")
+
+      val minEffDate = joinedDF.agg( min( stgSourceEffDateColumn ).cast(DateType) ).head().getDate(0)
+
+      if ( minEffDate == null )
+        None
+      else
+        Some( minEffDate )
+    }
+    else {
+      None
+    }
+
+    (changedEffDateAsOption, maxTimestampForSourceAsOption)
   }
 
-  private def isCacheStgSource(sourceMoniker: String, configDwEtl: ConfigDwEtl): Boolean = {
-    // if (configDwEtl.getDimNamesWhereStgSourceIsUsed(sourceMoniker).length > 1) true else false
+  private def isCacheStgSource(sourceId: String, configDwEtl: ConfigDwEtl): Boolean = {
+    // if (configDwEtl.getDimNamesWhereStgSourceIsUsed(sourceId).length > 1) true else false
     false // there is no simple way to determine if need to cache as the same datasets are used partially and may involve different columns
   }
 
@@ -241,20 +279,30 @@ object ModelObject {
     dfEffDate.cache()
   }
 
+  private def craeteEmptyEffeciveDatesDataFrame(): DataFrame = {
+    val spark = SparkSession.builder().getOrCreate() // this gets previously created session
+    spark.emptyDataFrame
+      .select(lit(null).cast(DateType).as(effDateColumnNameInDatesToProcess))
+  }
+
   /**
    *
    * @return DataFrame with a single column "EffDate" of DateType. "EffDate" is a well known name to be used in the code
    */
   private def getEffectiveDatesToProcessForInitialLoadBasedOnConfig(configDwEtl: ConfigDwEtl, modelObjectName: String): DataFrame = {
+    val dfEffDate = if (configDwEtl.getStgSourceIdsForDeterminingEffectiveDates(modelObjectName).isEmpty) {
+      craeteEmptyEffeciveDatesDataFrame()
+    }
+    else {
+      val (stgSourceId, (effectiveDateColNameInStgSrc, effectiveDateRule, timestampColumnInStgSrcAsOption))
+      = configDwEtl.getStgSourceIdsForDeterminingEffectiveDates(modelObjectName).head
 
-    val (stgSourceMoniker, (effectiveDateColNameInStgSrc, effectiveDateRule, timestampColumnInStgSrcAsOption))
-    = configDwEtl.getStgSourceMonikersForDeterminingEffectiveDates(modelObjectName).head
+      val dfDates = getEffectiveDatesBasedOnTheRule(effectiveDateRule, ModelObject.getStagingSource(stgSourceId), effectiveDateColNameInStgSrc)
 
-    val dfDates = getEffectiveDatesBasedOnTheRule(effectiveDateRule, ModelObject.getStagingSource(stgSourceMoniker), effectiveDateColNameInStgSrc)
-
-    // Normalize the dates df by dropping specific effective date column from the source and replacing it with "well known" name "EffDate"
-    val dfEffDate = dfDates.withColumn(ModelObject.effDateColumnNameInDatesToProcess, dfDates(effectiveDateColNameInStgSrc).cast(DateType))
-      .drop(effectiveDateColNameInStgSrc)
+      // Normalize the dates df by dropping specific effective date column from the source and replacing it with "well known" name "EffDate"
+      dfDates.withColumn(ModelObject.effDateColumnNameInDatesToProcess, dfDates(effectiveDateColNameInStgSrc).cast(DateType))
+        .drop(effectiveDateColNameInStgSrc)
+    }
 
     if (configDwEtl.getIsDebugDwLib) {
       dfEffDate.show(5);
@@ -266,76 +314,37 @@ object ModelObject {
 
   private def getEffectiveDatesBasedOnTheRule(effectiveDateRule: EffectiveDateRule, stgSourceWithEffectiveDate: DataFrame, effectiveDateColNameInStgSrc: String): DataFrame = {
 
-    val dfDates = effectiveDateRule match {
-      case EffectiveDateRule.DISTINCT_DATES => stgSourceWithEffectiveDate
-        .select(effectiveDateColNameInStgSrc)
-        .filter(s"""$effectiveDateColNameInStgSrc IS NOT NULL""") // The null values can be part of the data  and need to be removed
-        .distinct();
-      case EffectiveDateRule.ALL_DATES => getAllOrWeekdaysEffectiveDates(EffectiveDateRule.ALL_DATES, stgSourceWithEffectiveDate, effectiveDateColNameInStgSrc)
-      case EffectiveDateRule.WEEKDAYS => getAllOrWeekdaysEffectiveDates(EffectiveDateRule.WEEKDAYS, stgSourceWithEffectiveDate, effectiveDateColNameInStgSrc)
+    val spark = SparkSession.builder().getOrCreate() // this gets previously created session
+    val stgSourceWithEffectiveDateViewName = "stgSourceWithEffectiveDate" + java.util.UUID.randomUUID.toString.replace("-", "_")
+    stgSourceWithEffectiveDate.createOrReplaceTempView(stgSourceWithEffectiveDateViewName)
+    val sqlDatesToProcess = effectiveDateRule match {
+      case EffectiveDateRule.DISTINCT_DATES => s"""
+                                                  |SELECT CAST( $effectiveDateColNameInStgSrc AS DATE ) AS $effectiveDateColNameInStgSrc
+                                                  |FROM $stgSourceWithEffectiveDateViewName
+                                                  |WHERE $effectiveDateColNameInStgSrc IS NOT NULL
+                                                  |GROUP BY CAST( $effectiveDateColNameInStgSrc AS DATE )
+                                                  |HAVING $effectiveDateColNameInStgSrc IS NOT NULL
+                                                  |""".stripMargin
+      case EffectiveDateRule.ALL_DATES => s"""
+                                             |SELECT EXPLODE(SEQUENCE(MIN( CAST( $effectiveDateColNameInStgSrc AS DATE ) ), MAX( CAST( $effectiveDateColNameInStgSrc AS DATE ) ), INTERVAL 1 DAY)) AS $effectiveDateColNameInStgSrc
+                                             |FROM $stgSourceWithEffectiveDateViewName
+                                             |WHERE $effectiveDateColNameInStgSrc IS NOT NULL
+                                             |""".stripMargin
+      case EffectiveDateRule.WEEKDAYS => s"""
+                                            |SELECT
+                                            |    $effectiveDateColNameInStgSrc
+                                            |FROM (
+                                            |    SELECT EXPLODE(SEQUENCE(MIN( CAST( $effectiveDateColNameInStgSrc AS DATE ) ), MAX( CAST( $effectiveDateColNameInStgSrc AS DATE ) ), INTERVAL 1 DAY)) AS $effectiveDateColNameInStgSrc
+                                            |    FROM $stgSourceWithEffectiveDateViewName
+                                            |    WHERE $effectiveDateColNameInStgSrc IS NOT NULL
+                                            |)
+                                            |WHERE DAYOFWEEK(CAST( $effectiveDateColNameInStgSrc AS DATE ) ) NOT IN (1, 7) -- Excludes Sunday (1) and Saturday (7)
+                                            |""".stripMargin
       case _ => throw new RuntimeException(s"""Etl ERROR: Effective Date Rule ${effectiveDateRule.toString} currently is not supported""")
     }
 
-    dfDates
-  }
-
-  private def getAllOrWeekdaysEffectiveDates(effectiveDateRule: EffectiveDateRule, stgSourceWithEffectiveDate: DataFrame, effectiveDateColNameInStgSrc: String): DataFrame = {
-
-    val effDatesMinAndMax: Row = stgSourceWithEffectiveDate
-      .filter(s"""$effectiveDateColNameInStgSrc IS NOT NULL""")
-      .agg(min(effectiveDateColNameInStgSrc).cast(DateType), max(effectiveDateColNameInStgSrc).cast(DateType))
-      .head()
-
-    val start = effDatesMinAndMax.getDate(0)
-    val end = effDatesMinAndMax.getDate(1)
-
-    val spark = SparkSession.builder().getOrCreate() // this gets previously created session
-
-    // When start date is null there no dates to process - create df with no rows
-    val sqlDatesToProcess = if (start != null) {
-      val calendar: Calendar = Calendar.getInstance()
-      calendar.setTime(start)
-      if (effectiveDateRule == EffectiveDateRule.WEEKDAYS) {
-        if (calendar.get(Calendar.DAY_OF_WEEK) == 1) calendar.add(Calendar.DATE, 1) // Sunday
-        if (calendar.get(Calendar.DAY_OF_WEEK) == 7) calendar.add(Calendar.DATE, 2) // Saturday
-      }
-
-      val calendarEnd: Calendar = Calendar.getInstance()
-      calendarEnd.setTime(end)
-
-      var dates: mutable.Seq[Row] = mutable.Seq.empty[Row]
-      if (calendar.compareTo(calendarEnd) < 0)
-        dates = dates :+ Row(getDateFormatted(calendar.getTime(), "yyyy-MM-dd"))
-      do {
-        calendar.add(Calendar.DATE, 1)
-        if (effectiveDateRule == EffectiveDateRule.WEEKDAYS) {
-          if (calendar.get(Calendar.DAY_OF_WEEK) == 1) calendar.add(Calendar.DATE, 1) // Sunday
-          if (calendar.get(Calendar.DAY_OF_WEEK) == 7) calendar.add(Calendar.DATE, 2) // Saturday
-        }
-        val newDate = calendar.getTime()
-        dates = dates :+ Row(getDateFormatted(newDate, "yyyy-MM-dd"))
-        calendar.setTime(newDate)
-      } while (calendar.compareTo(calendarEnd) < 0)
-
-      val schema = StructType(Array(StructField("Date", StringType, true)))
-
-      val rdd = spark.sparkContext.parallelize(dates.toVector) // convert  mutable.Seq[Row] to immutable[Seq] according to spark 4.1
-      val dfDates = spark.createDataFrame(rdd, schema)
-
-      val datesViewName = "CalendarDates" + java.util.UUID.randomUUID.toString.replace("-", "_")
-      dfDates.createOrReplaceTempView(datesViewName)
-
-      if (configDwEtl.getIsDebugDwLib) {
-        dfDates.show(15);
-        dfDates.printSchema()
-      }
-      s"""SELECT CAST( Date AS DATE ) AS $effectiveDateColNameInStgSrc FROM $datesViewName """
-    }
-    else {
-      s"""SELECT CAST( NULL AS DATE ) AS $effectiveDateColNameInStgSrc WHERE 1=0 """
-    }
-
     val dfDateToProcess = spark.sql(sqlDatesToProcess)
+      .where(s"$effectiveDateColNameInStgSrc IS NOT NULL")
 
     if (configDwEtl.getIsDebugDwLib) {
       dfDateToProcess.show(15);
@@ -363,107 +372,139 @@ object ModelObject {
    * @return DataFrame with a single column "EffDate" of DateType. "EffDate" is a well known name to be used in the code
    */
   private def getEffectiveDatesToProcessForIncrLoad(configDwEtl: ConfigDwEtl, modelObjectName: String, dfDatesOverriddenBySpecificObjectAsOption: Option[DataFrame]): DataFrame = {
-    val spark = SparkSession.builder().getOrCreate() // this gets previously created session
-    val dfLastProcessedEffectiveDateTimestamp = ModelObject.getLastProcessedEffectiveDateTimestamp(configDwEtl, modelObjectName)
 
-    // This result set can have null for source Moniker if some dimension does not use the source directly, like DimDate or static dimension.
-    // This is fine because other dimensions will have the source that is used to determine dates, or even if we load just one dimension that does not have
-    // a source it will still have effective date that is derived from the source that has "isDefaultForEffectiveDate" indirectly,
-    // like can be in case of DimDate
-    // For example,
-    // +-------------+--------------------+--------------------+
-    // |SourceMoniker|LastProcessedEffDate|  MaxSourceTimestamp|
-    // +-------------+--------------------+--------------------+
-    // |        Teams|          2017-12-31|                null|
-    // |         null|          2017-12-31|                null|
-    // |   PlayByPlay|          2017-12-31|2021-03-31 12:16:...|
-    // +-------------+--------------------+--------------------+
-    val viewLastProcessedEffectiveDateTimestamp = "LastProcessedEffectiveDateTimestamp" + java.util.UUID.randomUUID.toString.replace("-", "_")
-    dfLastProcessedEffectiveDateTimestamp.createOrReplaceTempView(viewLastProcessedEffectiveDateTimestamp)
-
-
-    // Create a dataframe with current max timestamp for each source being processed.
-    // This dataframe can be empty, in case there are no sources being processed, which is the cae for some dimensions
-    // or the timestamp can be NULL, if datasource does not have it
-
-    val sourceMaxTimestampRecordSchema = new StructType(Array(
-      new StructField("SourceMoniker", StringType, true),
-      new StructField("MaxSourceTimestamp", TimestampType, true)
-    ))
-    val monikersForModelObject = configDwEtl.getStgSourceMonikersOfModelObject(modelObjectName)
-    val sourcesMaxTimestampList = for (
-      stgSourceMoniker <- monikersForModelObject;
-      maxTimestampAsOption = ModelObject.getStagingSourceMaxTimestamp(stgSourceMoniker, configDwEtl);
-      row = Row(stgSourceMoniker, maxTimestampAsOption.getOrElse(null))
-    ) yield row
-    val sourcesMaxTimestampRDD = spark.sparkContext.parallelize(sourcesMaxTimestampList)
-
-    // dfSourcesMaxTimestamp is a dataframe with all sources for a given model object and corresponding
-    // max timestamps from the latest version of the source.
-    // If the source does not have a timestamp  - it will be null.
-    val dfSourcesMaxTimestamp = spark.createDataFrame(sourcesMaxTimestampRDD, sourceMaxTimestampRecordSchema)
-    val viewCurrentSourceEffectiveDateMaxTimestamp = "CurrentSourceEffectiveDateMaxTimestamp" + java.util.UUID.randomUUID.toString.replace("-", "_")
-    dfSourcesMaxTimestamp.createOrReplaceTempView(viewCurrentSourceEffectiveDateMaxTimestamp)
-
-    if (configDwEtl.getIsDebugDwLib) {
-      dfSourcesMaxTimestamp.show(10);
-      dfSourcesMaxTimestamp.printSchema()
+    // Only process the first source with effective date
+    val dfEffDate = if (configDwEtl.getStgSourceIdsForDeterminingEffectiveDates(modelObjectName).isEmpty && dfDatesOverriddenBySpecificObjectAsOption.isEmpty) {
+      craeteEmptyEffeciveDatesDataFrame()
     }
-
-    // for now only process the first source with effective date
-    val (stgSourceMonikerForEffDate, (effectiveDateColNameInStgSrc, effectiveDateRule, timestampColumnInStgSrcAsOption))
-    = configDwEtl.getStgSourceMonikersForDeterminingEffectiveDates(modelObjectName).head
-
-    val dfEffDate = {
-
+    else {
       val (viewEffectiveDates, effectiveDateColName) = if (dfDatesOverriddenBySpecificObjectAsOption.isDefined) {
         val viewName = "DatesOverriddenBySpecificObject" + java.util.UUID.randomUUID.toString.replace("-", "_")
         dfDatesOverriddenBySpecificObjectAsOption.get.createOrReplaceTempView(viewName)
         (viewName, ModelObject.effDateColumnNameInDatesToProcess)
       }
       else {
-        (stgSourceMonikerForEffDate, effectiveDateColNameInStgSrc)
+        val (stgSourceIdForEffDate, (effectiveDateColNameInStgSrc, _, _)) = configDwEtl.getStgSourceIdsForDeterminingEffectiveDates(modelObjectName).head
+        (stgSourceIdForEffDate, effectiveDateColNameInStgSrc)
       }
 
+      val spark = SparkSession.builder().getOrCreate() // this gets previously created session
+      val dfLastProcessedEffectiveDateTimestamp = ModelObject.getLastProcessedEffectiveDateTimestamp(configDwEtl, modelObjectName)
+
+      // This result set can have null for source Id if some dimension does not use the source directly, like DimDate or static dimension.
+      // This is fine because other dimensions will have the source that is used to determine dates, or even if we load just one dimension that does not have
+      // a source it will still have effective date that is derived from the source that has "useToDetermineLoadEffectiveDates" indirectly,
+      // like can be in case of DimDate
+      // For example,
+      // +-------------+--------------------+--------------------+
+      // |SourceId     |LastProcessedEffDate|  MaxSourceTimestamp|
+      // +-------------+--------------------+--------------------+
+      // |        Teams|          2017-12-31|                null|
+      // |         null|          2017-12-31|                null|
+      // |   PlayByPlay|          2017-12-31|2021-03-31 12:16:...|
+      // +-------------+--------------------+--------------------+
+      val viewLastProcessedEffectiveDateTimestamp = "LastProcessedEffectiveDateTimestamp" + java.util.UUID.randomUUID.toString.replace("-", "_")
+      dfLastProcessedEffectiveDateTimestamp.createOrReplaceTempView(viewLastProcessedEffectiveDateTimestamp)
+
+
+      // Create a dataframe with current max timestamp for each source being processed.
+      // This dataframe can be empty, in case there are no sources being processed, which is the cae for some dimensions
+      // or the timestamp can be NULL, if datasource does not have it
+
+      val sourceMinChangedEffDateMaxTimestampRecordSchema = new StructType(Array(
+        new StructField("SourceId", StringType, true),
+        new StructField("MinChangedEffDate", DateType, true),
+        new StructField("MaxSourceTimestamp", TimestampType, true)
+      ))
+      val stgSourceIdsForModelObject = configDwEtl.getStgSourceIdsOfModelObject(modelObjectName)
+      val sourcesMinChangedEffDateMaxTimestampList = for (
+        stgSourceId <- stgSourceIdsForModelObject;
+        ( minChangedEffDateAsOption, maxTimestampAsOption ) = ModelObject.getStagingSourceMinChangedEffDateAndMaxTimestamp(stgSourceId, configDwEtl, Some( dfLastProcessedEffectiveDateTimestamp ) );
+        row = Row(stgSourceId, minChangedEffDateAsOption.getOrElse(null), maxTimestampAsOption.getOrElse(null))
+      ) yield row
+
+      // Sources can be empty and we still need this logic because effective dsates could be overridden
+
+      // dfSourcesMaxTimestamp is a dataframe with all sources for a given model object and corresponding
+      // max timestamps from the latest version of the source.
+      // If the source does not have a timestamp  - it will be null.
+      val dfSourcesMinChangedEffDateMaxTimestamp = if ( sourcesMinChangedEffDateMaxTimestampList.isEmpty ) {
+        spark.createDataFrame(spark.sparkContext.emptyRDD[Row], sourceMinChangedEffDateMaxTimestampRecordSchema)
+      }
+      else {
+        val sourcesMinChangedEffDateMaxTimestampRDD = spark.sparkContext.parallelize(sourcesMinChangedEffDateMaxTimestampList)
+        spark.createDataFrame(sourcesMinChangedEffDateMaxTimestampRDD, sourceMinChangedEffDateMaxTimestampRecordSchema)
+      }
+      val viewSourcesMinChangedEffDateDateMaxTimestamp = "SourcesMinChangedEffDateDateMaxTimestamp" + java.util.UUID.randomUUID.toString.replace("-", "_")
+      dfSourcesMinChangedEffDateMaxTimestamp.createOrReplaceTempView(viewSourcesMinChangedEffDateDateMaxTimestamp)
+
+      if (configDwEtl.getIsDebugDwLib) {
+        dfSourcesMinChangedEffDateMaxTimestamp.show(10);
+        dfSourcesMinChangedEffDateMaxTimestamp.printSchema()
+      }
+
+      // view viewSourcesMinChangedEffDateDateMaxTimestamp can have no rows if the model object has no sources
       val sqlEffDateFromStgSource =
         s"""|
-            |SELECT effDateSource.$effectiveDateColName
+            |SELECT CAST( effDateSource.$effectiveDateColName AS DATE ) AS $effectiveDateColName
             |FROM $viewEffectiveDates AS effDateSource
-            |WHERE effDateSource.$effectiveDateColName >
+            |WHERE CAST( effDateSource.$effectiveDateColName AS DATE ) >
+            | LEAST(
+            |       -- The first value in LEAST is last processed effective date for a given model object
+            |       -- The second one is the earliest changed effective date on the source that can happen when
+            |       -- old effective dates are reloaded during a day
             |       ( SELECT MAX( LastProcessedEffDate ) AS LastProcessedEffDate   -- this is the same select as next SELECT MAX( LastProcessedEffDate ) AS LastProcessedEffDate. Did it to get rid of CTEs which Spark does not like
             |         FROM $viewLastProcessedEffectiveDateTimestamp
-            |         WHERE SourceMoniker IN ( ${monikersForModelObject.mkString("'", "', '", "'")} )
-            |       )
-            |UNION -- this part will be used to catch-up sources that changed on the last effective date when some of the sources, including the one changed, were already run
-            |SELECT MAX( effDateSource.$effectiveDateColName ) AS $effectiveDateColName
-            |FROM $viewEffectiveDates AS effDateSource
+            |         WHERE SourceId IN ( ${stgSourceIdsForModelObject.mkString("'", "', '", "'")} )
+            |       ),
+            |       IFNULL( (
+            |         -- this will capture effective date changed for previously loaded
+            |         -- effective dates if the the source was reloaded for some effective dates
+            |           SELECT MIN( allSources.MinChangedEffDate )
+            |           FROM $viewSourcesMinChangedEffDateDateMaxTimestamp AS allSources -- this view can be empty if model object does not have a source
+            |               ), CAST( '2099-01-01' AS DATE ) )
+            |      ) -- LEAST
+            | -- below is the final part to define today's date
+            | -- for the case when main source did not change since last load
+            | -- but one of the sources changed (based on timestamp)
+            |UNION
+            |SELECT CAST( today_dt.today_date AS DATE ) AS $effectiveDateColName
+            |FROM (
+            |       SELECT current_date() AS today_date
+            |   ) AS today_dt
             |WHERE
-            |       ( SELECT MAX( $effectiveDateColName ) AS $effectiveDateColName FROM $viewEffectiveDates )
-            |     = ( SELECT MAX( LastProcessedEffDate ) AS LastProcessedEffDate
-            |         FROM $viewLastProcessedEffectiveDateTimestamp
-            |         WHERE SourceMoniker IN ( ${monikersForModelObject.mkString("'", "', '", "'")} )
-            |       )
-            |  AND EXISTS
+            |      NOT EXISTS ( SELECT 1 FROM $viewEffectiveDates ) -- i.e., the main source did not change and the list of dates is empty
+            |  AND EXISTS  -- this part is the same as in previous union, see if any timestamp is greater than the previous loaded
             |  ( SELECT 1
-            |    FROM $viewCurrentSourceEffectiveDateMaxTimestamp AS allSources -- this view can be empty if model object does not have a source
-            |      INNER JOIN $viewLastProcessedEffectiveDateTimestamp AS lastProcessed ON allSources.SourceMoniker = lastProcessed.SourceMoniker
+            |    FROM $viewSourcesMinChangedEffDateDateMaxTimestamp AS allSources -- this view can be empty if model object does not have a source
+            |      INNER JOIN $viewLastProcessedEffectiveDateTimestamp AS lastProcessed ON allSources.SourceId = lastProcessed.SourceId
             |    WHERE allSources.MaxSourceTimestamp IS NOT NULL
             |        AND lastProcessed.MaxSourceTimestamp IS NOT NULL
             |        AND allSources.MaxSourceTimestamp > lastProcessed.MaxSourceTimestamp
             |  )
-            |HAVING MAX( effDateSource.$effectiveDateColName ) IS NOT NULL
             |""".stripMargin
 
+
+      val dfEffDateFromStgSourceFromSql = spark.sql(sqlEffDateFromStgSource)
+      if (configDwEtl.getIsDebugDwLib) {
+        dfEffDateFromStgSourceFromSql.show(5);
+        dfEffDateFromStgSourceFromSql.printSchema()
+      }
+
       val dfEffDateFromStgSource = if (dfDatesOverriddenBySpecificObjectAsOption.isDefined) {
-        spark.sql(sqlEffDateFromStgSource)
+        dfEffDateFromStgSourceFromSql
       }
       else {
-        getEffectiveDatesBasedOnTheRule(effectiveDateRule, spark.sql(sqlEffDateFromStgSource), effectiveDateColName)
+        val (_, (_, effectiveDateRule, _)) = configDwEtl.getStgSourceIdsForDeterminingEffectiveDates(modelObjectName).head
+        getEffectiveDatesBasedOnTheRule(effectiveDateRule, dfEffDateFromStgSourceFromSql, effectiveDateColName)
       }
 
       // Normalize the dates df by dropping specific effective date column from the source and replacing it with "well known" name "EffDate"
-      dfEffDateFromStgSource.withColumn(ModelObject.effDateColumnNameInDatesToProcess, dfEffDateFromStgSource(effectiveDateColName).cast(DateType))
-        .drop(effectiveDateColNameInStgSrc)
+      if ( effectiveDateColName != ModelObject.effDateColumnNameInDatesToProcess )
+        dfEffDateFromStgSource.withColumn(ModelObject.effDateColumnNameInDatesToProcess, dfEffDateFromStgSource(effectiveDateColName).cast(DateType))
+        .drop(effectiveDateColName)
+      else
+        dfEffDateFromStgSource
     }
 
     if (configDwEtl.getIsDebugDwLib) {
@@ -476,7 +517,7 @@ object ModelObject {
 
 
   /**
-   * The result has a row for each datasource for a given dimensional model object
+   * The result has a one row with latest effective date for each datasource for a given dimensional model object
    *
    * @param configDwEtl
    * @param modelObjectName
@@ -494,23 +535,34 @@ object ModelObject {
 
     // Select min effective date and min timestamp (if available) from the last load of
     // all dimensional model objects being loaded
-    val monikersForModelObject = configDwEtl.getStgSourceMonikersOfModelObject(modelObjectName)
-    val sqlLastProcessedEffectiveDateTimestamp
-    =
-      s"""|
-          |SELECT SourceMoniker, LastProcessedEffDate, MaxSourceTimestamp
-          |FROM (
-          |  SELECT ROW_NUMBER() OVER ( PARTITION BY SourceMoniker ORDER BY ProcessedOn DESC ) AS ReverseLoadOrder,
-          |         *
-          |  FROM EtlLog
-          |  WHERE LastProcessedEffDate IS NOT NULL -- skip loads with no data to load. The will have NULL LastProcessedEffDate. All other loads must have non-NULL
-          |     AND ModelObjectName = '$modelObjectName'
-          |     AND SourceMoniker IN ( ${monikersForModelObject.mkString("'", "', '", "'")} )
-          |   ${if (configDwEtl.getRerunEtlAfter.isDefined) s" AND ProcessedOn <= CAST( '${configDwEtl.getRerunEtlAfter.get}' AS TIMESTAMP ) " else ""}
-          |) AS LatestLoad
-          |WHERE ReverseLoadOrder = 1
-					|  """.stripMargin
-    val dfLastProcessedEffectiveDateTimestamp = spark.sql(sqlLastProcessedEffectiveDateTimestamp)
+    val stgSourceIdsForModelObject = configDwEtl.getStgSourceIdsOfModelObject(modelObjectName)
+
+    val dfLastProcessedEffectiveDateTimestamp = if ( stgSourceIdsForModelObject.nonEmpty ) {
+      val sqlLastProcessedEffectiveDateTimestamp
+      =
+        s"""|
+            |SELECT SourceId, LastProcessedEffDate, MaxSourceTimestamp
+            |FROM (
+            |  SELECT ROW_NUMBER() OVER ( PARTITION BY SourceId ORDER BY ProcessedOn DESC ) AS ReverseLoadOrder,
+            |         *
+            |  FROM EtlLog
+            |  WHERE LastProcessedEffDate IS NOT NULL -- skip loads with no data to load. The will have NULL LastProcessedEffDate. All other loads must have non-NULL
+            |     AND ModelObjectName = '$modelObjectName'
+            |     AND SourceId IN ( ${stgSourceIdsForModelObject.mkString("'", "', '", "'")} )
+            |   ${if (configDwEtl.getRerunEtlAfter.isDefined) s" AND ProcessedOn <= CAST( '${configDwEtl.getRerunEtlAfter.get}' AS TIMESTAMP ) " else ""}
+            |) AS LatestLoad
+            |WHERE ReverseLoadOrder = 1
+					  |  """.stripMargin
+      spark.sql(sqlLastProcessedEffectiveDateTimestamp)
+    }
+    else {
+      val sourceEffDateTimestampRecordSchema = new StructType(Array(
+        new StructField("SourceId", StringType, true),
+        new StructField("LastProcessedEffDate", DateType, true ),
+        new StructField("MaxSourceTimestamp", TimestampType, true)
+      ))
+      spark.createDataFrame(spark.sparkContext.emptyRDD[Row], sourceEffDateTimestampRecordSchema)
+    }
 
     if (configDwEtl.getIsDebugDwLib) {
       dfLastProcessedEffectiveDateTimestamp.show(5);
@@ -529,22 +581,22 @@ object ModelObject {
     }
 
     dfLastProcessedEffectiveDateTimestamp
-      .select(col("SourceMoniker"), col("MaxSourceTimestamp"))
+      .select(col("SourceId"), col("MaxSourceTimestamp"))
       .collect()
       .filter {
-        case Row(null, null) => false // for some dimensions, that do not have source specified in the configuration, the SourceMoniker can be null, like for DimDate
+        case Row(null, null) => false // for some dimensions, that do not have source specified in the configuration, the SourceId can be null, like for DimDate
         case _ => true
       }
       .map {
-        case Row(sourceMoniker: String, sourceTimestamp: SqlTimestamp) => sourceMoniker -> Some(sourceTimestamp)
-        case Row(sourceMoniker: String, null) => sourceMoniker -> None
+        case Row(sourceId: String, sourceTimestamp: SqlTimestamp) => sourceId -> Some(sourceTimestamp)
+        case Row(sourceId: String, null) => sourceId -> None
       }
       .toMap
   }
 
   private def createEtlRecordDataFrame(
       modelObjectName: String,
-      sourceMoniker: Option[String],
+      sourceId: Option[String],
       maxTimestampAsOption: Option[SqlTimestamp],
       lastProcessedEffDateAsOption: Option[Date],
       isInitialLoad: Boolean,
@@ -556,7 +608,7 @@ object ModelObject {
     val etlRecordSchema = new StructType(Array(
       new StructField("JobId", StringType, true),
       new StructField("ModelObjectName", StringType, true),
-      new StructField("SourceMoniker", StringType, true),
+      new StructField("SourceId", StringType, true),
       new StructField("LastProcessedEffDate", DateType, true),
       new StructField("MaxSourceTimestamp", TimestampType, true),
       new StructField("IsInitialLoad", BooleanType, true),
@@ -568,7 +620,7 @@ object ModelObject {
       Row(
         jobId,
         modelObjectName,
-        sourceMoniker.getOrElse(null),
+        sourceId.getOrElse(null),
         lastProcessedEffDateAsOption.getOrElse(null),
         maxTimestampAsOption.getOrElse(null),
         isInitialLoad,
@@ -589,15 +641,15 @@ object ModelObject {
    *
    */
   private[etl] def createEtlLogRecord(
-      modelObjectName: String, configDwEtl: ConfigDwEtl, stgSourceMonikers: List[String], datesToProcess: List[Date],
+      modelObjectName: String, configDwEtl: ConfigDwEtl, stgSourceIds: List[String], datesToProcess: List[Date],
       isInitialLoad: Boolean, isRerun: Boolean, durationSec: Double): Unit = {
 
     // loop via every source and record the last timestamp used and the last effective date used for this dimension
 
     val dfEtlRecordList = for (
-      stgSourceMoniker <- stgSourceMonikers;
-      maxTimestampAsOption = ModelObject.getStagingSourceMaxTimestamp(stgSourceMoniker, configDwEtl);
-      dfEtlRecord = ModelObject.createEtlRecordDataFrame(modelObjectName, Some(stgSourceMoniker), maxTimestampAsOption, datesToProcess.lastOption, isInitialLoad, isRerun, durationSec);
+      stgSourceId <- stgSourceIds;
+      ( _, maxTimestampAsOption ) = ModelObject.getStagingSourceMinChangedEffDateAndMaxTimestamp(stgSourceId, configDwEtl, None);
+      dfEtlRecord = ModelObject.createEtlRecordDataFrame(modelObjectName, Some(stgSourceId), maxTimestampAsOption, datesToProcess.lastOption, isInitialLoad, isRerun, durationSec);
       test = if (configDwEtl.getIsDebugDwLib) {
         dfEtlRecord.show(4)
         dfEtlRecord.printSchema()
@@ -641,38 +693,45 @@ private[etl] abstract class ModelObject(private val modelObjectName: String) {
   private val viewWithDatesToProcess: String = "DatesToProcess_" + modelObjectName + "_" + java.util.UUID.randomUUID.toString.replace("-", "_")
 
   protected def effDateColumnNameInDatesToProcess: String = ModelObject.effDateColumnNameInDatesToProcess
+
   protected def isInitialLoad: Boolean = configDwEtl.getIsInitialLoad
+
   protected def datesToProcessView: String = viewWithDatesToProcess
-  protected def isStgSourceChangedSinceLastLoad(stgSrcViewWithMonikerName: String): Boolean = isStgSourceChangedSinceLastLoadIfKnown
-    .getOrElse(stgSrcViewWithMonikerName, Some(true)) // When a name passed to this function is not the correct source, just return true
+
+  protected def isStgSourceChangedSinceLastLoad(stgSrcView: String): Boolean = isStgSourceChangedSinceLastLoadIfKnown
+    .getOrElse(stgSrcView, Some(true)) // When a name passed to this function is not the correct source, just return true
     .getOrElse(true)
-  protected def getLastProcessedStgSourceTimestamp(stgSrcViewWithMonikerName: String): Option[SqlTimestamp] = lastProcessedStgSourceTimestamp
-    .getOrElse(stgSrcViewWithMonikerName, None) // When a name passed to this function is not the correct source, return None
-  protected def preProcess(stgSrcViewsWithMonikerNames: List[String], datesToProcess: List[Date]): Unit = () //preProcess is called before the etl method starts processing. override to create multiple views on the same source
-  protected def postProcess(stgSrcViewsWithMonikerNames: List[String], datesToProcess: List[Date], dfModelObject: DataFrame): DataFrame = dfModelObject // postProcess is called right before the df is saved. Overrode if needed
+
+  protected def getLastProcessedStgSourceTimestamp(stgSrcView: String): Option[SqlTimestamp] = lastProcessedStgSourceTimestamp
+    .getOrElse(stgSrcView, None) // When a name passed to this function is not the correct source, return None
+
+  protected def preProcess(stgSrcViewsWithIdNames: List[String], datesToProcess: List[Date]): Unit = () //preProcess is called before the etl method starts processing. override to create multiple views on the same source
+
+  protected def postProcess(stgSrcViewsWithIdNames: List[String], datesToProcess: List[Date], dfModelObject: DataFrame): DataFrame = dfModelObject // postProcess is called right before the df is saved. Overrode if needed
+
   protected def getCustomDatesToProcess(dfDatesToProcessBasedOnConfig: DataFrame): Option[DataFrame] = None // Override this method to create custom list of dates to process
 
-  private[etl] def etlModelObject(stgSrcViewsWithMonikerNames: List[String], datesToProcess: List[Date]): Option[DataFrame] // Both dimensions and facts must override this method
+  private[etl] def etlModelObject(stgSrcViewsWithIdNames: List[String], datesToProcess: List[Date]): Option[DataFrame] // Both dimensions and facts must override this method
 
-  private[etl] def checkLoadResultForDuplicateColumns(dfSrc: DataFrame, stgSrcViewWithMonikerName: String): Unit = {
+  private[etl] def checkLoadResultForDuplicateColumns(dfSrc: DataFrame, stgSrcView: String): Unit = {
     val srcSchema: StructType = dfSrc.schema
     // check for duplicate names in the result set
     val duplicates = srcSchema.names.diff(srcSchema.names.distinct).distinct
     if (!duplicates.isEmpty) {
-      val errorMessage = s"""Etl Runner ERROR: Data for $modelObjectName $getTypeOfCurrentInstance ${if (stgSrcViewWithMonikerName == ModelObject.viewNameForNonExistentDataSource) "" else "from \"" + stgSrcViewWithMonikerName + "\" source "}has duplicate column names: ${duplicates.mkString(", ")} """
+      val errorMessage = s"""Etl Runner ERROR: Data for $modelObjectName $getTypeOfCurrentInstance ${if (stgSrcView == ModelObject.viewNameForNonExistentDataSource) "" else "from \"" + stgSrcView + "\" source "}has duplicate column names: ${duplicates.mkString(", ")} """
       throw new RuntimeException(errorMessage)
     }
   }
 
-  private[etl] def checkForMismatchedFieldNamesInActualAndExpectedSchemas(dfSrc: DataFrame, stgSrcViewWithMonikerName: String, expectedSchema: StructType, expectedSchemaHasDimensionKeyColumn: Boolean = false ): Unit = {
+  private[etl] def checkForMismatchedFieldNamesInActualAndExpectedSchemas(dfSrc: DataFrame, stgSrcView: String, expectedSchema: StructType, expectedSchemaHasDimensionKeyColumn: Boolean = false): Unit = {
     val srcSchema: StructType = dfSrc.schema
-    val errorMessage = createErrorMessageForMismatchedFieldsInActualAndExpectedSchemas(stgSrcViewWithMonikerName, srcSchema, expectedSchema, expectedSchemaHasDimensionKeyColumn)
+    val errorMessage = createErrorMessageForMismatchedFieldsInActualAndExpectedSchemas(stgSrcView, srcSchema, expectedSchema, expectedSchemaHasDimensionKeyColumn)
     if (!errorMessage.isEmpty)
       throw new RuntimeException(errorMessage)
     require(srcSchema.names.toSet == expectedSchema.names.toSet) // confirm that names match. They still may be in different order
   }
 
-  private[etl]  def checkFieldsWithSameNamesForTypeCompatibility(dfSrc: DataFrame, expectedSchema: StructType, stgSrcViewWithMonikerName: String): Unit = {
+  private[etl] def checkFieldsWithSameNamesForTypeCompatibility(dfSrc: DataFrame, expectedSchema: StructType, stgSrcView: String): Unit = {
     val srcSchema: StructType = dfSrc.schema
 
     val errorMessages = for (
@@ -715,17 +774,17 @@ private[etl] abstract class ModelObject(private val modelObjectName: String) {
     if (!uniqueErrorMessages.isEmpty) {
 
       val finalErrorMessage =
-        s"""Etl Runner ERROR: Data for $modelObjectName $getTypeOfCurrentInstance ${if (stgSrcViewWithMonikerName == ModelObject.viewNameForNonExistentDataSource) "" else "from \"" + stgSrcViewWithMonikerName + "\" source"} has errors with data types: """ +
+        s"""Etl Runner ERROR: Data for $modelObjectName $getTypeOfCurrentInstance ${if (stgSrcView == ModelObject.viewNameForNonExistentDataSource) "" else "from \"" + stgSrcView + "\" source"} has errors with data types: """ +
           uniqueErrorMessages.mkString(", ")
       throw new RuntimeException(finalErrorMessage)
     }
   }
 
-  private def createErrorMessageForMismatchedFieldsInActualAndExpectedSchemas(stgSrcViewWithMonikerName: String, actualSchema: StructType, expectedSchema: StructType, expectedSchemaHasDimensionKeyColumn: Boolean): String = {
+  private def createErrorMessageForMismatchedFieldsInActualAndExpectedSchemas(stgSrcView: String, actualSchema: StructType, expectedSchema: StructType, expectedSchemaHasDimensionKeyColumn: Boolean): String = {
     val baseErrorMessage = if (expectedSchema.length == actualSchema.length)
       s"""Etl Runner ERROR: The following discrepancies in column names for \"$modelObjectName\" $getTypeOfCurrentInstance may be the reason for the error: """
     else
-      s"""Etl Runner ERROR: Data for \"$modelObjectName\" $getTypeOfCurrentInstance ${if (stgSrcViewWithMonikerName == ModelObject.viewNameForNonExistentDataSource) "" else "from \"" + stgSrcViewWithMonikerName + "\" source "}has incorrect number of columns - expected ${expectedSchema.length} ${if (!expectedSchemaHasDimensionKeyColumn) "(that excludes surrogate key which must not be included in the load result) " else ""}vs. actual ${actualSchema.length} """
+      s"""Etl Runner ERROR: Data for \"$modelObjectName\" $getTypeOfCurrentInstance ${if (stgSrcView == ModelObject.viewNameForNonExistentDataSource) "" else "from \"" + stgSrcView + "\" source "}has incorrect number of columns - expected ${expectedSchema.length} ${if (!expectedSchemaHasDimensionKeyColumn) "(that excludes surrogate key which must not be included in the load result) " else ""}vs. actual ${actualSchema.length} """
 
     // if there is at least one field with the same name, assume the intention is to have matching names and in that case determine fields missing from either schema
     val commonFields = actualSchema.names.intersect(expectedSchema.names)
@@ -789,7 +848,8 @@ private[etl] abstract class ModelObject(private val modelObjectName: String) {
         else {
           ModelObject.getEffectiveDatesToProcessForIncrLoadBasedOnOverride(configDwEtl, modelObjectName, dfSpecificDates)
         }
-      } else {
+      }
+      else {
         dfEffDates
       }
 
@@ -809,22 +869,22 @@ private[etl] abstract class ModelObject(private val modelObjectName: String) {
   private[etl] def loadStagingSources(): List[String] = {
 
     val list = for (
-      stgSourceMoniker <- configDwEtl.getStgSourceMonikersOfModelObject(modelObjectName);
-      dfStgSource = ModelObject.getStagingSource(stgSourceMoniker)
-    ) yield stgSourceMoniker -> dfStgSource
+      stgSourceId <- configDwEtl.getStgSourceIdsOfModelObject(modelObjectName);
+      dfStgSource = ModelObject.getStagingSource(stgSourceId)
+    ) yield stgSourceId -> dfStgSource
 
-    for ((stgSourceMoniker, dfStgSource) <- list) {
-      dfStgSource.createOrReplaceTempView(stgSourceMoniker) // need this as view to determine new versions
+    for ((stgSourceId, dfStgSource) <- list) {
+      dfStgSource.createOrReplaceTempView(stgSourceId) // need this as view to determine new versions
     }
 
-    for (stgSourceMoniker <- configDwEtl.getStgSourceMonikersOfModelObject(modelObjectName)) {
-      val timestampMaxCurrentAsOption = ModelObject.getStagingSourceMaxTimestamp(stgSourceMoniker, configDwEtl)
-      isStgSourceChangedSinceLastLoadIfKnown += (stgSourceMoniker -> (if (timestampMaxCurrentAsOption.isDefined && lastProcessedStgSourceTimestamp.contains(stgSourceMoniker)
-        && lastProcessedStgSourceTimestamp(stgSourceMoniker).isDefined)
-        Some(timestampMaxCurrentAsOption.get.compareTo(lastProcessedStgSourceTimestamp(stgSourceMoniker).get) > 0) else None))
+    for (stgSourceId <- configDwEtl.getStgSourceIdsOfModelObject(modelObjectName)) {
+      val ( _, timestampMaxCurrentAsOption ) = ModelObject.getStagingSourceMinChangedEffDateAndMaxTimestamp(stgSourceId, configDwEtl, None )
+      isStgSourceChangedSinceLastLoadIfKnown += (stgSourceId -> (if (timestampMaxCurrentAsOption.isDefined && lastProcessedStgSourceTimestamp.contains(stgSourceId)
+        && lastProcessedStgSourceTimestamp(stgSourceId).isDefined)
+        Some(timestampMaxCurrentAsOption.get.compareTo(lastProcessedStgSourceTimestamp(stgSourceId).get) > 0) else None))
     }
 
-    // This returns a list of TempView names that are the same as stgSourceMoniker
+    // This returns a list of TempView names that are the same as stgSourceId
     list.map(_._1)
   }
 

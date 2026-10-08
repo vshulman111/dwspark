@@ -29,7 +29,7 @@ import org.apache.spark.sql.SparkSession
  */
 class DimTeamRole(dimName: String) extends Dim(dimName) {
 
-  override def loadDim(stgSrcViewWithMonikerName: String): Option[DataFrame] = {
+  override def loadDim(stgSrcView: String): Option[DataFrame] = {
 
     val rows = List((1, DwNFL.teamRoleOffense), (2, DwNFL.teamRoleDefense), (3, DwNFL.teamRolePenalty), (4, DwNFL.teamRoleTimeout))
     // This is the syntax for a single column where a Tuple with a single column need to be used.

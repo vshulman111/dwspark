@@ -37,7 +37,6 @@ object DataSourceLoader {
   def validateConfig(appConfig: Config): Unit = {
 
     val schemaBaseFileName = "sourceloader-config-schema"
-    val pathToVersionField = "sourceLoad.sourceLoadConfigVersion"
     var errors: mutable.Seq[String] = mutable.Seq.empty[String]
 
     // Validate schema in three steps:
@@ -47,7 +46,7 @@ object DataSourceLoader {
     //    - unique names of actions
 
     // Do Steps 1 and 2
-    val errorsAndwarnings = MiscHelper.validateConfigVersionAndConfigAgainstThatVersion(appConfig, schemaBaseFileName, pathToVersionField)
+    val errorsAndwarnings = MiscHelper.validateConfig(appConfig, schemaBaseFileName)
 
     errors ++= errorsAndwarnings._1
     val warnings = errorsAndwarnings._2

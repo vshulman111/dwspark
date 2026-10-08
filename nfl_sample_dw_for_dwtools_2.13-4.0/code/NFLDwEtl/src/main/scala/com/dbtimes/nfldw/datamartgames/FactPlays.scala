@@ -27,19 +27,19 @@ import org.apache.spark.sql.SparkSession
  */
 class FactPlays(factName: String) extends FactsNFL(factName) {
 
-  override def loadFact(stgSrcViewWithMonikerName: String): Option[DataFrame] = {
+  override def loadFact(stgSrcView: String): Option[DataFrame] = {
 
-    if ( !isStgSourceChangedSinceLastLoad(stgSrcViewWithMonikerName) ) {
-      println(s"-- Skipping loading fact $factName from source $stgSrcViewWithMonikerName as is has not changed since last load")
+    if ( !isStgSourceChangedSinceLastLoad(stgSrcView) ) {
+      println(s"-- Skipping loading fact $factName from source $stgSrcView as is has not changed since last load")
       None
     }
     else {
-      val dfFact = if (stgSrcViewWithMonikerName == "PlayByPlay") {
+      val dfFact = if (stgSrcView == "PlayByPlay") {
         val sqlStgSource =
           s"""
              |SELECT
              |  src.SeasonYear                                                                      AS SeasonYear,
-             |  "$stgSrcViewWithMonikerName"                                                                    AS DataSourceMoniker,
+             |  "$stgSrcView"                                                                    AS DataSourceId,
              |  CAST( src.GameId AS STRING )                                                        AS GameId,
              |  CAST( src.GameDate AS DATE )                                                        AS PlayDate,
              |  CASE WHEN src.OffenseTeam IS NOT NULL AND NOT( src.PlayType <=> 'TIMEOUT' )
@@ -98,12 +98,12 @@ class FactPlays(factName: String) extends FactsNFL(factName) {
              |   CAST( src.Yards    AS DOUBLE )                                                      AS Yards          ,
              |   CAST( src.ToGo    AS DOUBLE )                                                       AS ToGo           ,
              |   CAST( src.PenaltyYards      AS DOUBLE )                                             AS PenaltyYards
-             |FROM $stgSrcViewWithMonikerName AS src
+             |FROM $stgSrcView AS src
              |   INNER JOIN $datesToProcessView AS dates   ON  src.SeasonYear = udfSeasonYear( dates.$effDateColumnNameInDatesToProcess )
              |
              | """.stripMargin
 
-        println(s"-- Loading fact $factName from source $stgSrcViewWithMonikerName using sql:\n" + sqlStgSource)
+        println(s"-- Loading fact $factName from source $stgSrcView using sql:\n" + sqlStgSource)
 
         val spark = SparkSession.builder().getOrCreate()
         val dfStgSource = spark.sql(sqlStgSource)

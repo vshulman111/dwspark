@@ -580,11 +580,11 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
       throw new RuntimeException("""Loader Configuration ERROR: "fileSource.internetLocation.applicationSpecific" is only valid for "fileSource.internetLocation" """)
   }
 
-  private[sourceloader] def getPostProcessStgSourceMonikers: List[String] = {
+  private[sourceloader] def getPostProcessStgSourceIds: List[String] = {
     if (action.hasPath("action.postProcess.stgSources")) {
       val stgSources = action.getConfigList("action.postProcess.stgSources").asScala.toList
       stgSources map {
-        case source: Config => source.getString("moniker")
+        case source: Config => source.getString("id")
       }
     }
     else {
@@ -592,33 +592,33 @@ private[sourceloader] class LoadAction(private val loadAction: ConfigValue) exte
     }
   }
   /*
-    private[sourceloader] def getStgSourceMonikers( stgSources: List[Config] ): List[String] = {
+    private[sourceloader] def getStgSourceIds( stgSources: List[Config] ): List[String] = {
       stgSources map {
-        case source: Config => source.getString("moniker")
+        case source: Config => source.getString("id")
       }
     }*/
 
-  private def getPostProcessSourceConfiguration(sourceMoniker: String): Config = {
+  private def getPostProcessSourceConfiguration(sourceId: String): Config = {
     val stgSources = action.getConfigList("action.postProcess.stgSources").asScala.toList
     val stgSource = stgSources find {
       case source: Config => {
-        source.getString("moniker") == sourceMoniker
+        source.getString("id") == sourceId
       }
     }
     if (!stgSource.isDefined)
-      throw new RuntimeException("""Load  ERROR: Post process source """ + sourceMoniker + """is not defined """)
+      throw new RuntimeException("""Load  ERROR: Post process source """ + sourceId + """is not defined """)
     stgSource.get
   }
 
-  private[sourceloader] def getIsPostProcessFileStgSourceParquet(sourceMoniker: String): Boolean = {
-    if (getPostProcessSourceConfiguration(sourceMoniker).hasPath("fileSource.parquet"))
+  private[sourceloader] def getIsPostProcessFileStgSourceParquet(sourceId: String): Boolean = {
+    if (getPostProcessSourceConfiguration(sourceId).hasPath("fileSource.parquet"))
       true
     else
       false
   }
 
-  private[sourceloader] def getPostProcessStgSourceFilePath(sourceMoniker: String): String = {
-    getPostProcessSourceConfiguration(sourceMoniker).getString("fileSource.path")
+  private[sourceloader] def getPostProcessStgSourceFilePath(sourceId: String): String = {
+    getPostProcessSourceConfiguration(sourceId).getString("fileSource.path")
   }
 
   // Implement remaining methods from SourceDataAction trait

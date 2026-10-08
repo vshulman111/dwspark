@@ -30,10 +30,10 @@ import org.apache.spark.sql.SparkSession
  */
 class DimTeam(dimName: String) extends Dim(dimName) {
 
-  override def loadDim(effDateYYYY_MM_DD: String, stgSrcViewWithMonikerName: String): Option[DataFrame] = {
-    println(s"-- Processing effective date $effDateYYYY_MM_DD for dimension $dimName from source $stgSrcViewWithMonikerName")
+  override def loadDim(effDateYYYY_MM_DD: String, stgSrcView: String): Option[DataFrame] = {
+    DwNFL.etlLogger.info(s"-- Processing effective date $effDateYYYY_MM_DD for dimension $dimName from source $stgSrcView")
 
-    val dfStgSource = if (stgSrcViewWithMonikerName == "Teams") {
+    val dfStgSource = if (stgSrcView == "Teams") {
       val sqlStgSource
       =
         s"""| SELECT
@@ -45,11 +45,11 @@ class DimTeam(dimName: String) extends Dim(dimName) {
             |   ''                      AS TeamConference,
             |   SeasonTeamName          AS HistTeamName,
             |   SeasonAbbreviation      AS HistTeamAbbrevName
-            | FROM $stgSrcViewWithMonikerName
+            | FROM $stgSrcView
             | WHERE SeasonYear = udfSeasonYear( CAST( '$effDateYYYY_MM_DD' AS DATE) )
              """.stripMargin
 
-      println(s"-- Loading dimension $dimName from source $stgSrcViewWithMonikerName using sql:\n$sqlStgSource")
+      DwNFL.etlLogger.info(s"-- Loading dimension $dimName from source $stgSrcView using sql:\n$sqlStgSource")
       val spark = SparkSession.builder().getOrCreate()
       spark.sql(sqlStgSource)
     }
@@ -58,7 +58,10 @@ class DimTeam(dimName: String) extends Dim(dimName) {
 
     if (DwNFL.getIsDebug) {
       dfStgSource.show(5);
-      dfStgSource.printSchema()
+      dfStgSource.printSchema();
+
+      val dfString = dfStgSource.filter( "TeamOriginalName = 'Washington Redskins'" ).take(20).mkString("\n")
+      DwNFL.etlLogger.info( dfString );
     }
 
     Some(dfStgSource)
@@ -80,11 +83,10 @@ class DimTeam(dimName: String) extends Dim(dimName) {
 
     val sqlDimDatesToProcess
     =
-      s"""|SELECT MAX( datesAll.$effDateColumnNameInDatesToProcess ) AS SeasonDate
+      s"""|SELECT CAST( CONCAT( CAST(SeasonYear AS STRING), '-12-01' ) AS DATE ) AS SeasonDate
           |FROM Teams
-          |   INNER JOIN DatesToProcessBasedOnConfig AS datesAll ON Teams.SeasonYear = udfSeasonYear( datesAll.$effDateColumnNameInDatesToProcess )
-          |GROUP BY Teams.SeasonYear
-					|  """.stripMargin
+          |GROUP BY SeasonYear
+		  |  """.stripMargin
     val spark = SparkSession.builder().getOrCreate()
     val dfDimDatesToProcess = spark.sql(sqlDimDatesToProcess)
 

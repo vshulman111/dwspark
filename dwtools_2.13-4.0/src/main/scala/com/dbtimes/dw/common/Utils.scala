@@ -51,8 +51,8 @@ object Utils {
     appConfig
   }
 
-  def createFileNameWithCurrentTimestamp(filePathDest: String, sourceFilePathOrUrl: String, defaultFileName: String): String = {
-    FileHelper.createFileNameWithCurrentTimestamp(filePathDest, sourceFilePathOrUrl, defaultFileName)
+  def createFileNameWithCurrentTimestamp(filePathDest: String, sourceFilePathOrUrl: String, defaultFileName: String, defaultFileExtension: String = "", timestampAsPrefix: Boolean = false  ): String = {
+    FileHelper.createFileNameWithCurrentTimestamp(filePathDest, sourceFilePathOrUrl, defaultFileName, defaultFileExtension, timestampAsPrefix )
   }
 
   def isSparkRunningLocally(): Boolean = {

@@ -30,7 +30,7 @@ abstract private[sourceloader] class ActionProcessor {
     }
     else {
       // load all staging sources used in post process
-      loadStagingSources(action)  // this will create temp views with same names as staging file monikers,
+      loadStagingSources(action)  // this will create temp views with same names as staging file ids,
                                   // so we do not need to save the result of this call
       getPostProcessedStgSource(action, dfStg)
     }
@@ -38,23 +38,23 @@ abstract private[sourceloader] class ActionProcessor {
 
   private def loadStagingSources(action: LoadAction): Map[String, DataFrame] = {
     val list = for (
-      stgSourceMoniker <- action.getPostProcessStgSourceMonikers;
-      dfStgSource = loadStagingSource(stgSourceMoniker, action)
-    ) yield stgSourceMoniker -> dfStgSource
+      stgSourceId <- action.getPostProcessStgSourceIds;
+      dfStgSource = loadStagingSource(stgSourceId, action)
+    ) yield stgSourceId -> dfStgSource
 
-    for ((stgSourceMoniker, dfStgSource) <- list) {
-      dfStgSource.createOrReplaceTempView(stgSourceMoniker)
+    for ((stgSourceId, dfStgSource) <- list) {
+      dfStgSource.createOrReplaceTempView(stgSourceId)
     }
 
     list.toMap
   }
 
-  private def loadStagingSource(sourceMoniker: String, action: LoadAction): DataFrame = {
+  private def loadStagingSource(sourceId: String, action: LoadAction): DataFrame = {
     val spark = SparkSession.builder().getOrCreate() // this gets previously created session
 
-    val dfStgSource = if (action.getIsPostProcessFileStgSourceParquet(sourceMoniker)) {
+    val dfStgSource = if (action.getIsPostProcessFileStgSourceParquet(sourceId)) {
       spark.read.format("org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat")
-        .load(action.getPostProcessStgSourceFilePath(sourceMoniker))
+        .load(action.getPostProcessStgSourceFilePath(sourceId))
     }
     else
       throw new RuntimeException("""Loader  ERROR: unsupported staging source type  """)

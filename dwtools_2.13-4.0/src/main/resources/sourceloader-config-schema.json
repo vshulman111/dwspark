@@ -1,10 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Source Loader Configuration v2",
+  "title": "Source Loader Configuration",
   "description": "Defines required field for source loader application that uses DW Source Loader library. The application configuration can have other root level fields.",
   "type": "object",
   "$defs": {
     "jdbcOptions": {
+      "title":  "JDBC Options",
       "description": "These options are applicable to all JDBC databases - currently sql server and oracle. See https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html for details.",
       "type": "object",
       "properties": {
@@ -102,7 +103,7 @@
         }
       },
       "not": {
-        "required": ["partitionColumn"],
+        "required": [ "partitionColumn" ],
         "description": "\"partitionColumn\" is excluded from the list of options for jdbc source since this column has to be defined in \"schema\" with \"isPartitionColumn\" flag"
       },
       "patternProperties": {
@@ -122,11 +123,6 @@
       "type": "object",
       "description": "Configuration for Source Loader",
       "properties": {
-        "sourceLoadConfigVersion": {
-          "type": "string",
-          "description": "Version of a Source Loader json configuration",
-          "const": "2"
-        },
         "loadActions": {
           "type": "array",
           "description": "Specifications for loading files or database tables into staging files. A load action is used to load one database table or one file. A single load action can also be used to load multiple files if their names follow the same pattern with a date being a variable part",
@@ -781,9 +777,9 @@
                     "items": {
                       "type": "object",
                       "properties": {
-                        "moniker": {
+                        "id": {
                           "type": "string",
-                          "description": "Staging source moniker is a unique identifier of a staging source. It is used as a view name in Spark SQL."
+                          "description": "Staging source id is a unique identifier of a staging source. It is used as a view name in Spark SQL."
                         },
                         "description": {
                           "type": "string"
@@ -813,7 +809,7 @@
                         "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
                       },
                       "required": [
-                        "moniker",
+                        "id",
                         "fileSource"
                       ],
                       "unevaluatedProperties": false
@@ -845,9 +841,9 @@
             "allOf": [
               {
                 "if": {
-                  "description": "If destination file defined with \"isVersioned\"=true, then the schema must be defined with at least one column as primary key, i.e. \"isUniqueKey\": true",
                   "properties": {
                     "fileDestination": {
+                    "description": "If destination file defined with \"isVersioned\"=true, then the schema must be defined with at least one column as primary key, i.e. \"isUniqueKey\": true",
                       "properties": {
                         "isVersioned": { "const": true }
                       },
@@ -921,7 +917,6 @@
         "^__": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "Comment field begins with two underscores. There can be any number of comment fields." }
       },
       "required": [
-        "sourceLoadConfigVersion",
         "loadActions"
       ],
       "unevaluatedProperties": false
